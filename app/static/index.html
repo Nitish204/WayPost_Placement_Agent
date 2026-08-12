@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Waypost — find the role that's actually yours</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&display=swap');
+
+  :root{
+    --paper:#F6F3EC;
+    --ink:#211F1B;
+    --ink-soft:#5B584F;
+    --line:#DEDACB;
+    --moss:#33513F;
+    --moss-deep:#22392C;
+    --clay:#B55A3A;
+    --card:#FFFFFF;
+    --ok-bg:#EAF1E8;
+    --ok-text:#33513F;
+    --err-bg:#F8E9E4;
+    --err-text:#93402A;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Inter',sans-serif;
+    min-height:100vh;
+  }
+  h1,h2,h3,.brand{font-family:'Fraunces',serif;font-weight:500;}
+  .wrap{max-width:1040px;margin:0 auto;padding:0 24px;}
+
+  /* ---- Top bar ---- */
+  header{
+    border-bottom:1px solid var(--line);
+    padding:20px 0;
+  }
+  header .wrap{display:flex;align-items:center;justify-content:space-between;}
+  .brand{font-size:22px;letter-spacing:-0.01em;display:flex;align-items:center;gap:8px;}
+  .brand svg{flex-shrink:0;}
+  .brand small{font-family:'Inter',sans-serif;font-weight:500;font-size:11px;color:var(--ink-soft);letter-spacing:0.08em;text-transform:uppercase;margin-left:4px;}
+  #userbar{display:none;align-items:center;gap:14px;font-size:14px;color:var(--ink-soft);}
+  #userbar button{
+    font-family:'Inter',sans-serif;font-size:13px;color:var(--ink);background:none;border:1px solid var(--line);
+    padding:7px 14px;border-radius:6px;cursor:pointer;
+  }
+  #userbar button:hover{border-color:var(--ink-soft);}
+
+  /* ---- Auth screen ---- */
+  #auth-screen{display:flex;min-height:calc(100vh - 73px);align-items:center;justify-content:center;padding:60px 24px;}
+  .auth-card{
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:40px 36px;
+    width:100%;
+    max-width:400px;
+  }
+  .auth-card h1{font-size:26px;margin:0 0 6px;}
+  .auth-card p.sub{color:var(--ink-soft);font-size:14px;margin:0 0 28px;line-height:1.5;}
+  .tabs{display:flex;gap:4px;background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:3px;margin-bottom:24px;}
+  .tabs button{
+    flex:1;border:none;background:none;padding:9px 0;font-family:'Inter',sans-serif;font-size:13px;font-weight:500;
+    color:var(--ink-soft);border-radius:6px;cursor:pointer;
+  }
+  .tabs button.active{background:var(--card);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,0.06);}
+
+  label{display:block;font-size:12px;font-weight:500;color:var(--ink-soft);margin:16px 0 6px;text-transform:uppercase;letter-spacing:0.04em;}
+  label:first-of-type{margin-top:0;}
+  input, textarea{
+    width:100%;padding:11px 13px;border:1px solid var(--line);border-radius:8px;
+    font-family:'Inter',sans-serif;font-size:14px;background:#fff;color:var(--ink);
+  }
+  input:focus, textarea:focus{outline:none;border-color:var(--moss);box-shadow:0 0 0 3px rgba(51,81,63,0.12);}
+  .hint{font-size:12px;color:var(--ink-soft);margin-top:4px;font-weight:400;text-transform:none;letter-spacing:0;}
+
+  .btn-primary{
+    width:100%;margin-top:24px;padding:12px 0;background:var(--moss);color:#fff;border:none;border-radius:8px;
+    font-family:'Inter',sans-serif;font-size:14px;font-weight:600;cursor:pointer;
+  }
+  .btn-primary:hover{background:var(--moss-deep);}
+  .btn-primary:disabled{opacity:0.55;cursor:default;}
+  .btn-secondary{
+    padding:10px 18px;background:none;border:1px solid var(--line);border-radius:8px;color:var(--ink);
+    font-family:'Inter',sans-serif;font-size:13px;font-weight:500;cursor:pointer;
+  }
+  .btn-secondary:hover{border-color:var(--ink-soft);}
+
+  .msg{font-size:13px;padding:10px 12px;border-radius:8px;margin-top:16px;line-height:1.5;}
+  .msg.err{background:var(--err-bg);color:var(--err-text);}
+  .msg.ok{background:var(--ok-bg);color:var(--ok-text);}
+
+  /* ---- Dashboard ---- */
+  #dashboard{display:none;padding:36px 0 80px;}
+  .grid{display:grid;grid-template-columns:320px 1fr;gap:28px;align-items:start;}
+  @media(max-width:800px){.grid{grid-template-columns:1fr;}}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:24px;margin-bottom:20px;}
+  .card h2{font-size:16px;margin:0 0 4px;}
+  .card p.desc{font-size:13px;color:var(--ink-soft);margin:0 0 16px;line-height:1.5;}
+
+  .dropzone{
+    border:1.5px dashed var(--line);border-radius:10px;padding:22px;text-align:center;cursor:pointer;
+  }
+  .dropzone:hover{border-color:var(--moss);}
+  .dropzone .fname{font-size:13px;font-weight:500;margin-top:6px;}
+  .skill-pill{
+    display:inline-block;background:var(--ok-bg);color:var(--ok-text);font-size:12px;padding:4px 10px;
+    border-radius:20px;margin:3px 4px 0 0;
+  }
+
+  .toggle-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-top:1px solid var(--line);}
+  .toggle-row:first-of-type{border-top:none;}
+  .toggle-row span{font-size:13px;}
+  .switch{position:relative;width:38px;height:22px;flex-shrink:0;}
+  .switch input{opacity:0;width:0;height:0;}
+  .slider{position:absolute;inset:0;background:var(--line);border-radius:22px;cursor:pointer;transition:0.15s;}
+  .slider:before{content:"";position:absolute;width:16px;height:16px;left:3px;top:3px;background:#fff;border-radius:50%;transition:0.15s;}
+  input:checked + .slider{background:var(--moss);}
+  input:checked + .slider:before{transform:translateX(16px);}
+
+  .job-card{border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin-bottom:10px;}
+  .job-card .row{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;}
+  .job-card h3{font-size:15px;margin:0 0 2px;font-family:'Inter',sans-serif;font-weight:600;}
+  .job-card .meta{font-size:12.5px;color:var(--ink-soft);margin:0;}
+  .score-badge{
+    flex-shrink:0;background:var(--moss);color:#fff;font-size:12px;font-weight:600;padding:5px 10px;border-radius:20px;
+  }
+  .job-card a{font-size:12.5px;color:var(--clay);text-decoration:none;font-weight:500;}
+  .job-card a:hover{text-decoration:underline;}
+  .job-card .desc{font-size:13px;color:var(--ink-soft);margin:8px 0 0;line-height:1.5;}
+
+  .search-row{display:flex;gap:8px;margin-bottom:16px;}
+  .search-row input{flex:1;}
+  .search-row button{
+    background:var(--ink);color:#fff;border:none;border-radius:8px;padding:0 18px;font-size:13px;font-weight:500;cursor:pointer;
+  }
+  .empty{font-size:13px;color:var(--ink-soft);text-align:center;padding:24px 0;}
+  .note{font-size:12px;color:var(--ink-soft);background:var(--paper);border-radius:8px;padding:10px 12px;margin-top:14px;line-height:1.5;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <div class="brand">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 2L4 21l8-5 8 5-8-19z" stroke="#33513F" stroke-width="1.6" stroke-linejoin="round"/></svg>
+      Waypost <small>Placement agent</small>
+    </div>
+    <div id="userbar">
+      <span id="userbar-name"></span>
+      <button onclick="logout()">Log out</button>
+    </div>
+  </div>
+</header>
+
+<!-- AUTH -->
+<div id="auth-screen">
+  <div class="auth-card">
+    <h1>Find your next role</h1>
+    <p class="sub">Waypost quietly scans new postings every hour and tells you the moment one fits — by email or Telegram.</p>
+
+    <div class="tabs">
+      <button class="active" id="tab-login" onclick="switchTab('login')">Log in</button>
+      <button id="tab-register" onclick="switchTab('register')">Create account</button>
+    </div>
+
+    <form id="login-form" onsubmit="return handleLogin(event)">
+      <label>Email</label>
+      <input type="email" id="login-email" required placeholder="priya@email.com" />
+      <label>Password</label>
+      <input type="password" id="login-password" required placeholder="••••••••" />
+      <button class="btn-primary" type="submit">Log in</button>
+    </form>
+
+    <form id="register-form" onsubmit="return handleRegister(event)" style="display:none;">
+      <label>Full name</label>
+      <input type="text" id="reg-name" required placeholder="Priya Sharma" />
+      <label>Email</label>
+      <input type="email" id="reg-email" required placeholder="priya@email.com" />
+      <label>Password</label>
+      <input type="password" id="reg-password" required minlength="8" placeholder="At least 8 characters" />
+      <label>Roles you want</label>
+      <input type="text" id="reg-titles" required placeholder="Software Engineer, Data Analyst" />
+      <div class="hint">Comma separated. Used to filter and rank new postings.</div>
+      <label>Preferred locations</label>
+      <input type="text" id="reg-locations" required placeholder="Bangalore, Remote" />
+      <button class="btn-primary" type="submit">Create account</button>
+    </form>
+
+    <div id="auth-msg"></div>
+  </div>
+</div>
+
+<!-- DASHBOARD -->
+<div id="dashboard">
+  <div class="wrap">
+    <div class="grid">
+      <!-- LEFT COLUMN -->
+      <div>
+        <div class="card">
+          <h2>Your resume</h2>
+          <p class="desc">PDF or DOCX. Used to rank job matches and score against job descriptions.</p>
+          <div class="dropzone" onclick="document.getElementById('resume-input').click()">
+            <div>Click to upload</div>
+            <div class="fname" id="resume-fname"></div>
+          </div>
+          <input type="file" id="resume-input" accept=".pdf,.docx" style="display:none" onchange="handleResumeUpload(event)" />
+          <div id="resume-skills" style="margin-top:12px;"></div>
+        </div>
+
+        <div class="card">
+          <h2>Alerts</h2>
+          <p class="desc">Get pinged the moment a strong match appears — no need to keep checking back.</p>
+          <div class="toggle-row">
+            <span>Email alerts</span>
+            <label class="switch"><input type="checkbox" id="toggle-email" onchange="updatePrefs()"><span class="slider"></span></label>
+          </div>
+          <div class="toggle-row">
+            <span>Telegram alerts</span>
+            <label class="switch"><input type="checkbox" id="toggle-telegram" onchange="updatePrefs()"><span class="slider"></span></label>
+          </div>
+          <div id="telegram-link-box" style="margin-top:10px;">
+            <input type="text" id="telegram-chat-id" placeholder="Telegram chat ID" style="margin-bottom:8px;" />
+            <button class="btn-secondary" style="width:100%;" onclick="linkTelegram()">Link Telegram</button>
+            <div class="note">Message your bot on Telegram, then paste the chat ID it gives you here.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT COLUMN -->
+      <div>
+        <div class="card">
+          <h2>Job search</h2>
+          <p class="desc">Pulled live from Greenhouse, Lever and Adzuna, ranked against your resume.</p>
+          <div class="search-row">
+            <input type="text" id="search-titles" placeholder="Roles, comma separated" />
+            <input type="text" id="search-locations" placeholder="Locations" />
+            <button onclick="searchJobs()">Search</button>
+          </div>
+          <div id="jobs-results"><div class="empty">Search above to see ranked matches.</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = '';
+let token = localStorage.getItem('waypost_token') || null;
+
+function switchTab(tab){
+  document.getElementById('tab-login').classList.toggle('active', tab==='login');
+  document.getElementById('tab-register').classList.toggle('active', tab==='register');
+  document.getElementById('login-form').style.display = tab==='login' ? 'block' : 'none';
+  document.getElementById('register-form').style.display = tab==='register' ? 'block' : 'none';
+  document.getElementById('auth-msg').innerHTML = '';
+}
+
+function showMsg(id, text, ok){
+  document.getElementById(id).innerHTML = `<div class="msg ${ok?'ok':'err'}">${text}</div>`;
+}
+
+async function api(path, opts={}){
+  opts.headers = opts.headers || {};
+  if(token) opts.headers['Authorization'] = 'Bearer ' + token;
+  const res = await fetch(API + path, opts);
+  const data = await res.json().catch(()=>({}));
+  if(!res.ok) throw new Error(data.detail || 'Something went wrong.');
+  return data;
+}
+
+async function handleLogin(e){
+  e.preventDefault();
+  const fd = new FormData();
+  fd.append('email', document.getElementById('login-email').value);
+  fd.append('password', document.getElementById('login-password').value);
+  try{
+    const data = await api('/auth/login', {method:'POST', body: fd});
+    onAuthed(data);
+  }catch(err){ showMsg('auth-msg', err.message, false); }
+  return false;
+}
+
+async function handleRegister(e){
+  e.preventDefault();
+  const fd = new FormData();
+  fd.append('name', document.getElementById('reg-name').value);
+  fd.append('email', document.getElementById('reg-email').value);
+  fd.append('password', document.getElementById('reg-password').value);
+  fd.append('job_titles', document.getElementById('reg-titles').value);
+  fd.append('locations', document.getElementById('reg-locations').value);
+  try{
+    const data = await api('/auth/register', {method:'POST', body: fd});
+    onAuthed(data);
+  }catch(err){ showMsg('auth-msg', err.message, false); }
+  return false;
+}
+
+function onAuthed(data){
+  token = data.access_token;
+  localStorage.setItem('waypost_token', token);
+  document.getElementById('auth-screen').style.display = 'none';
+  document.getElementById('dashboard').style.display = 'block';
+  document.getElementById('userbar').style.display = 'flex';
+  document.getElementById('userbar-name').textContent = data.user.name;
+  loadMe();
+}
+
+function logout(){
+  token = null;
+  localStorage.removeItem('waypost_token');
+  document.getElementById('auth-screen').style.display = 'flex';
+  document.getElementById('dashboard').style.display = 'none';
+  document.getElementById('userbar').style.display = 'none';
+}
+
+async function loadMe(){
+  try{
+    const me = await api('/auth/me');
+    document.getElementById('userbar-name').textContent = me.name;
+    document.getElementById('search-titles').value = me.job_titles || '';
+    document.getElementById('search-locations').value = me.locations || '';
+    document.getElementById('toggle-email').checked = me.notify_email;
+    document.getElementById('toggle-telegram').checked = me.notify_telegram;
+    document.getElementById('telegram-link-box').style.display = me.telegram_linked ? 'none' : 'block';
+    if(me.has_resume){
+      document.getElementById('resume-fname').textContent = 'Resume on file';
+      renderSkills(me.resume_skills);
+    }
+  }catch(err){ logout(); }
+}
+
+function renderSkills(skills){
+  const box = document.getElementById('resume-skills');
+  box.innerHTML = skills.filter(Boolean).map(s => `<span class="skill-pill">${s}</span>`).join('');
+}
+
+async function handleResumeUpload(e){
+  const file = e.target.files[0];
+  if(!file) return;
+  document.getElementById('resume-fname').textContent = 'Uploading ' + file.name + '…';
+  const fd = new FormData();
+  fd.append('file', file);
+  try{
+    const data = await api('/resume/upload', {method:'POST', body: fd});
+    document.getElementById('resume-fname').textContent = file.name;
+    renderSkills(data.skills_found);
+  }catch(err){
+    document.getElementById('resume-fname').textContent = 'Upload failed: ' + err.message;
+  }
+}
+
+async function updatePrefs(){
+  const fd = new FormData();
+  fd.append('notify_email', document.getElementById('toggle-email').checked);
+  fd.append('notify_telegram', document.getElementById('toggle-telegram').checked);
+  try{ await api('/profile/update', {method:'POST', body: fd}); }catch(err){}
+}
+
+async function linkTelegram(){
+  const fd = new FormData();
+  fd.append('telegram_chat_id', document.getElementById('telegram-chat-id').value);
+  try{
+    await api('/notifications/telegram/link', {method:'POST', body: fd});
+    document.getElementById('telegram-link-box').style.display = 'none';
+  }catch(err){ alert(err.message); }
+}
+
+async function searchJobs(){
+  const fd = new FormData();
+  fd.append('job_titles', document.getElementById('search-titles').value);
+  fd.append('locations', document.getElementById('search-locations').value);
+  const box = document.getElementById('jobs-results');
+  box.innerHTML = '<div class="empty">Searching…</div>';
+  try{
+    const data = await api('/jobs/search', {method:'POST', body: fd});
+    if(data.jobs.length === 0){
+      box.innerHTML = '<div class="empty">No matches yet — the agent refreshes postings hourly, check back soon.</div>';
+      return;
+    }
+    box.innerHTML = data.jobs.map(j => `
+      <div class="job-card">
+        <div class="row">
+          <div>
+            <h3>${j.title}</h3>
+            <p class="meta">${j.company} · ${j.location}</p>
+          </div>
+          <span class="score-badge">${j.match_score}%</span>
+        </div>
+        <p class="desc">${(j.description||'').slice(0,160)}${(j.description||'').length>160?'…':''}</p>
+        <a href="${j.apply_url}" target="_blank" rel="noopener">View posting →</a>
+      </div>
+    `).join('');
+  }catch(err){ box.innerHTML = `<div class="msg err">${err.message}</div>`; }
+}
+
+if(token){ onAuthed({access_token: token, user:{name:''}}); }
+</script>
+</body>
+</html>
