@@ -15,6 +15,11 @@ app/
   agent.py                - Claude tool-calling orchestrator (the "agent" brain)
   scheduler.py            - Background job that keeps fetching new postings continuously
   static/index.html        - Login/register + dashboard frontend (served at /)
+  data/
+    companies.json           - Curated fallback Greenhouse/Lever board list, used
+                                automatically if GREENHOUSE_BOARDS/LEVER_BOARDS are unset
+    sample_jobs.json          - 5 sample job postings for offline testing/demo,
+                                seeded via POST /jobs/seed-sample - no API keys needed
   core/
     auth.py                - Password hashing (bcrypt) + JWT issue/verify
     notifier.py             - Email (SMTP) + Telegram bot message delivery
@@ -87,6 +92,14 @@ uvicorn app.main:app --reload --port 8000
 
 Open `http://localhost:8000` for the login/dashboard UI, or use the API
 directly as shown below.
+
+**No API keys yet?** Register/log in, then call `POST /jobs/seed-sample`
+to load 5 sample jobs with zero external calls - lets you test search,
+matching, and the notification flow immediately, before setting up
+Adzuna/Greenhouse/Lever/SMTP/Telegram. Also, if `GREENHOUSE_BOARDS` and
+`LEVER_BOARDS` are left blank in `.env`, the app automatically falls
+back to a small curated list in `app/data/companies.json` so real
+ingestion still pulls something on a fresh install.
 
 The scheduler starts automatically with the app and polls sources every
 `INGEST_INTERVAL_MINUTES` (default 60) for every distinct title+location
