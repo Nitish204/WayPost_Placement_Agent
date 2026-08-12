@@ -24,7 +24,7 @@ from app.db import init_db, get_session, Job, UserProfile
 from app.core.resume_parser import parse_resume
 from app.core.ats_scorer import compute_ats_score
 from app.core.matcher import find_matches
-from app.core.ingest import run_ingestion_cycle
+from app.core.ingest import run_ingestion_cycle, seed_sample_jobs
 from app.core.auth import (
     hash_password, verify_password, create_access_token, get_current_user,
 )
@@ -239,6 +239,18 @@ def agent_chat(
     internships in India and check my resume against the top one.'"""
     reply = run_agent(message, resume_text=current_user.resume_text or "")
     return {"reply": reply}
+
+
+@app.post("/jobs/seed-sample")
+def seed_sample(
+    current_user: UserProfile = Depends(get_current_user),
+    db: Session = Depends(get_session),
+):
+    """Loads a small set of sample jobs from app/data/sample_jobs.json
+    into the pool. Use this to test search/matching/notifications right
+    after setup, before configuring real GREENHOUSE_BOARDS/LEVER_BOARDS/
+    ADZUNA keys - no external calls, no API keys required."""
+    return seed_sample_jobs(db)
 
 
 @app.get("/health")
