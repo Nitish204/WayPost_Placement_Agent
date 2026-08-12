@@ -1,0 +1,252 @@
+"""
+FastAPI application - the HTTP interface to the placement agent.
+
+Endpoints:
+  POST /profile              -> create/update a user's search profile
+  POST /resume/upload        -> upload + parse a resume (PDF/DOCX)
+  POST /resume/ats-score     -> score a resume against a job description
+  POST /jobs/search          -> filtered + ranked job search
+  POST /jobs/ingest          -> manually trigger a fetch cycle (also runs on schedule)
+  POST /agent/chat           -> natural-language entrypoint to the full agent
+"""
+import os
+import secrets
+import logging
+from fastapi import FastAPI, UploadFile, File, Form, Depends, HTTPException
+from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.orm import Session
+from dotenv import load_dotenv
+
+load_dotenv()
+
+from app.db import init_db, get_session, Job, UserProfile
+from app.core.resume_parser import parse_resume
+from app.core.ats_scorer import compute_ats_score
+from app.core.matcher import find_matches
+from app.core.ingest import run_ingestion_cycle
+from app.core.auth import (
+    hash_password, verify_password, create_access_token, get_current_user,
+)
+from app.agent import run_agent
+from app.scheduler import start_scheduler, stop_scheduler
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+app = FastAPI(title="Placement Finder Agent", version="0.2.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+@app.on_event("startup")
+def on_startup():
+    init_db()
+    interval = int(os.getenv("INGEST_INTERVAL_MINUTES", "60"))
+    start_scheduler(interval_minutes=interval)
+    logger.info("App started, DB initialized, scheduler running.")
+
+
+@app.on_event("shutdown")
+def on_shutdown():
+    stop_scheduler()
+
+
+# ---------------------------------------------------------------------
+# Auth
+# ---------------------------------------------------------------------
+
+@app.post("/auth/register")
+def register(
+    name: str = Form(...),
+    email: str = Form(...),
+    password: str = Form(..., min_length=8),
+    job_titles: str = Form(..., description="Comma separated, e.g. 'Software Engineer,Data Analyst'"),
+    locations: str = Form(..., description="Comma separated, e.g. 'Bangalore,Remote'"),
+    experience_level: str = Form("fresher"),
+    db: Session = Depends(get_session),
+):
+    existing = db.query(UserProfile).filter(UserProfile.email == email).first()
+    if existing:
+        raise HTTPException(409, "An account with this email already exists. Try logging in instead.")
+
+    profile = UserProfile(
+        name=name, email=email, hashed_password=hash_password(password),
+        job_titles=job_titles, locations=locations, experience_level=experience_level,
+    )
+    db.add(profile)
+    db.commit()
+    db.refresh(profile)
+
+    token = create_access_token(profile.id, profile.email)
+    return {
+        "access_token": token, "token_type": "bearer",
+        "user": {"id": profile.id, "name": profile.name, "email": profile.email},
+    }
+
+
+@app.post("/auth/login")
+def login(
+    email: str = Form(...),
+    password: str = Form(...),
+    db: Session = Depends(get_session),
+):
+    profile = db.query(UserProfile).filter(UserProfile.email == email).first()
+    if not profile or not profile.hashed_password or not verify_password(password, profile.hashed_password):
+        raise HTTPException(401, "Incorrect email or password.")
+
+    token = create_access_token(profile.id, profile.email)
+    return {
+        "access_token": token, "token_type": "bearer",
+        "user": {"id": profile.id, "name": profile.name, "email": profile.email},
+    }
+
+
+@app.get("/auth/me")
+def me(current_user: UserProfile = Depends(get_current_user)):
+    return {
+        "id": current_user.id, "name": current_user.name, "email": current_user.email,
+        "job_titles": current_user.job_titles, "locations": current_user.locations,
+        "experience_level": current_user.experience_level,
+        "has_resume": bool(current_user.resume_text),
+        "resume_skills": (current_user.resume_skills or "").split(",") if current_user.resume_skills else [],
+        "notify_email": current_user.notify_email,
+        "notify_telegram": current_user.notify_telegram,
+        "telegram_linked": bool(current_user.telegram_chat_id),
+        "match_score_threshold": current_user.match_score_threshold,
+    }
+
+
+# ---------------------------------------------------------------------
+# Profile / preferences (all require a valid Bearer token now)
+# ---------------------------------------------------------------------
+
+@app.post("/profile/update")
+def update_profile(
+    job_titles: str = Form(None),
+    locations: str = Form(None),
+    experience_level: str = Form(None),
+    notify_email: bool = Form(None),
+    notify_telegram: bool = Form(None),
+    match_score_threshold: float = Form(None),
+    current_user: UserProfile = Depends(get_current_user),
+    db: Session = Depends(get_session),
+):
+    for field, value in [
+        ("job_titles", job_titles), ("locations", locations),
+        ("experience_level", experience_level), ("notify_email", notify_email),
+        ("notify_telegram", notify_telegram), ("match_score_threshold", match_score_threshold),
+    ]:
+        if value is not None:
+            setattr(current_user, field, value)
+    db.commit()
+    return {"message": "Profile updated."}
+
+
+@app.post("/notifications/telegram/link")
+def link_telegram(
+    telegram_chat_id: str = Form(..., description="Get this from @userinfobot on Telegram, or your bot's /start handler"),
+    current_user: UserProfile = Depends(get_current_user),
+    db: Session = Depends(get_session),
+):
+    current_user.telegram_chat_id = telegram_chat_id
+    db.commit()
+    return {"message": "Telegram linked. You'll now receive job alerts there too."}
+
+
+@app.post("/resume/upload")
+async def upload_resume(
+    file: UploadFile = File(...),
+    current_user: UserProfile = Depends(get_current_user),
+    db: Session = Depends(get_session),
+):
+    file_bytes = await file.read()
+    parsed = parse_resume(file_bytes, file.filename)
+
+    current_user.resume_text = parsed["raw_text"]
+    current_user.resume_skills = ",".join(parsed["skills"])
+    db.commit()
+
+    return {
+        "message": "Resume parsed and saved.",
+        "skills_found": parsed["skills"],
+        "estimated_experience_years": parsed["experience_years"],
+        "text_length": len(parsed["raw_text"]),
+    }
+
+
+@app.post("/resume/ats-score")
+async def ats_score(
+    job_description: str = Form(...),
+    resume_text: str = Form(None),
+    current_user: UserProfile = Depends(get_current_user),
+):
+    if not resume_text:
+        resume_text = current_user.resume_text
+    if not resume_text:
+        raise HTTPException(400, "Provide resume_text directly, or upload a resume first via /resume/upload.")
+
+    return compute_ats_score(resume_text, job_description)
+
+
+@app.post("/jobs/search")
+def search_jobs(
+    job_titles: str = Form(..., description="Comma separated"),
+    locations: str = Form(..., description="Comma separated"),
+    top_k: int = Form(20),
+    current_user: UserProfile = Depends(get_current_user),
+    db: Session = Depends(get_session),
+):
+    all_jobs = db.query(Job).filter(Job.is_active == True).all()  # noqa: E712
+    job_dicts = [
+        {"title": j.title, "company": j.company, "location": j.location,
+         "description": j.description, "apply_url": j.apply_url, "source": j.source}
+        for j in all_jobs
+    ]
+
+    titles_list = [t.strip() for t in job_titles.split(",")]
+    locations_list = [l.strip() for l in locations.split(",")]
+
+    matches = find_matches(job_dicts, titles_list, locations_list, current_user.resume_text or "", top_k=top_k)
+    return {"count": len(matches), "jobs": matches}
+
+
+@app.post("/jobs/ingest")
+def trigger_ingest(
+    search_query: str = Form(""),
+    search_location: str = Form(""),
+    current_user: UserProfile = Depends(get_current_user),
+    db: Session = Depends(get_session),
+):
+    """Manually triggers one fetch-and-store cycle immediately, instead
+    of waiting for the next scheduled run. Requires login so this can't
+    be spammed anonymously."""
+    result = run_ingestion_cycle(db, search_query, search_location)
+    return result
+
+
+@app.post("/agent/chat")
+def agent_chat(
+    message: str = Form(...),
+    current_user: UserProfile = Depends(get_current_user),
+):
+    """Natural language entrypoint - e.g. 'Find me remote data analyst
+    internships in India and check my resume against the top one.'"""
+    reply = run_agent(message, resume_text=current_user.resume_text or "")
+    return {"reply": reply}
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+
+# Serve the static frontend (login/dashboard) at the root. Mounted last
+# so it doesn't shadow the API routes above.
+if os.path.isdir("app/static"):
+    app.mount("/", StaticFiles(directory="app/static", html=True), name="static")
