@@ -4,14 +4,16 @@ SQLAlchemy-supported DB (Postgres, MySQL) by changing DATABASE_URL in .env
 """
 import os
 import hashlib
+import logging
 import datetime as dt
 from sqlalchemy import (
-    create_engine, Column, Integer, String, Text, DateTime, Float, Boolean
+    create_engine, Column, Integer, String, Text, DateTime, Float, Boolean, inspect, text
 )
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./placements.db")
 IS_SQLITE = "sqlite" in DATABASE_URL
+logger = logging.getLogger(__name__)
 
 # pool_pre_ping: tests each connection with a lightweight query before
 # handing it to a request, transparently reconnecting if it's dead -
@@ -93,8 +95,48 @@ def make_job_hash(title: str, company: str, location: str) -> str:
     return hashlib.sha256(key.encode()).hexdigest()
 
 
+def _column_ddl_type(column: Column) -> str:
+    """Maps a SQLAlchemy column's type to the DDL fragment needed for a
+    raw ALTER TABLE ... ADD COLUMN statement. Only needs to cover the
+    types actually used in our models."""
+    return column.type.compile(dialect=engine.dialect)
+
+
+def _sync_schema():
+    """Auto-migration: compares each model's expected columns against
+    what actually exists in the live DB and ADD COLUMNs anything
+    missing, with a safe default so existing rows don't break.
+
+    Why this exists: Base.metadata.create_all() (used in init_db) only
+    creates tables that don't exist yet - it silently does nothing to
+    a table that's already there, even if the model gained new columns
+    since that table was first created. That's exactly what caused the
+    'UndefinedColumn' error for reset_token_hash/reset_token_expires:
+    the live Postgres table predated those fields.
+
+    This isn't a substitute for a real migration tool (Alembic) if the
+    project grows - it only handles the additive case (new nullable
+    column), not renames/drops/type changes. But it means future
+    column additions deploy cleanly without a manual SQL step on Neon,
+    which is the actual recurring failure mode we want to eliminate."""
+    inspector = inspect(engine)
+    for table in Base.metadata.sorted_tables:
+        if not inspector.has_table(table.name):
+            continue  # brand new table - create_all already handles this case
+        existing_cols = {col["name"] for col in inspector.get_columns(table.name)}
+        for column in table.columns:
+            if column.name in existing_cols:
+                continue
+            ddl_type = _column_ddl_type(column)
+            stmt = f'ALTER TABLE {table.name} ADD COLUMN "{column.name}" {ddl_type}'
+            logger.warning(f"[db] auto-migrating: {stmt}")
+            with engine.begin() as conn:
+                conn.execute(text(stmt))
+
+
 def init_db():
     Base.metadata.create_all(bind=engine)
+    _sync_schema()
 
 
 def get_session():
