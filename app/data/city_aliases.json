@@ -1,0 +1,22 @@
+{
+  "_comment": "Maps a canonical city name to common alternate spellings/names people actually use. Used by matcher.py so 'Bangalore' also matches job listings that say 'Bengaluru', etc. Add more as you notice mismatches in real search results.",
+
+  "bangalore": ["bengaluru", "blr"],
+  "bombay": ["mumbai"],
+  "madras": ["chennai"],
+  "calcutta": ["kolkata"],
+  "gurgaon": ["gurugram"],
+  "delhi": ["new delhi", "ncr", "delhi ncr"],
+  "hyderabad": ["hyd"],
+  "pune": ["poona"],
+  "trivandrum": ["thiruvananthapuram"],
+  "cochin": ["kochi", "ernakulam"],
+  "mysore": ["mysuru"],
+  "vizag": ["visakhapatnam"],
+  "nyc": ["new york", "new york city", "manhattan"],
+  "sf": ["san francisco", "bay area", "sfo"],
+  "la": ["los angeles"],
+  "dc": ["washington dc", "washington d.c."],
+  "london": ["greater london"],
+  "remote": ["work from home", "wfh", "anywhere", "distributed"]
+}
