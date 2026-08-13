@@ -11,6 +11,8 @@ Design:
   this replaces the old "trust whatever user_id you're given" pattern.
 """
 import os
+import secrets
+import hashlib
 import datetime as dt
 from jose import jwt, JWTError
 from passlib.context import CryptContext
@@ -68,3 +70,34 @@ def get_current_user(
     if not user:
         raise HTTPException(status_code=401, detail="User no longer exists. Please log in again.")
     return user
+
+
+# ---------------------------------------------------------------------
+# Password reset tokens
+# ---------------------------------------------------------------------
+# Design: generate a random URL-safe token, email the RAW token to the
+# user, but only ever store its SHA-256 hash + an expiry in the DB -
+# same principle as password hashing, so a DB leak alone can't be used
+# to reset anyone's password. Tokens are single-use (cleared on
+# successful reset) and short-lived (30 min default).
+
+RESET_TOKEN_EXPIRE_MINUTES = int(os.getenv("RESET_TOKEN_EXPIRE_MINUTES", "30"))
+
+
+def generate_reset_token() -> tuple[str, str, dt.datetime]:
+    """Returns (raw_token_for_email, hash_to_store, expiry). The raw
+    token is only ever held in memory long enough to put it in the
+    email - never written to the DB or logs."""
+    raw_token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+    expires = dt.datetime.utcnow() + dt.timedelta(minutes=RESET_TOKEN_EXPIRE_MINUTES)
+    return raw_token, token_hash, expires
+
+
+def verify_reset_token(raw_token: str, stored_hash: str, expires_at: dt.datetime) -> bool:
+    if not stored_hash or not expires_at:
+        return False
+    if dt.datetime.utcnow() > expires_at:
+        return False
+    incoming_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+    return secrets.compare_digest(incoming_hash, stored_hash)
