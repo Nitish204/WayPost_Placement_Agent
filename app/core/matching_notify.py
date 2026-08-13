@@ -69,7 +69,8 @@ def notify_new_matches_for_all_users(db: Session) -> dict:
         sent_any = False
         if user.notify_email and user.email:
             subject, html = format_match_email(user.name or "there", new_matches)
-            sent_any = send_email(user.email, subject, html) or sent_any
+            email_sent, _ = send_email(user.email, subject, html)
+            sent_any = email_sent or sent_any
         if user.notify_telegram and user.telegram_chat_id:
             text = format_match_telegram(new_matches)
             sent_any = send_telegram(user.telegram_chat_id, text) or sent_any
