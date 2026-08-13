@@ -149,7 +149,7 @@ def forgot_password(
     subject, html = format_reset_email(user.name or "there", reset_url)
     sent = send_email(user.email, subject, html)
     if not sent:
-        logger.warning(f"[auth] reset email failed to send for user_id={user.id} - SMTP may not be configured")
+        logger.warning(f"[auth] reset email failed to send for user_id={user.id} - check RESEND_API_KEY is set")
 
     return generic_response
 
