@@ -25,13 +25,14 @@ RESEND_FROM = os.getenv("RESEND_FROM", "onboarding@resend.dev")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 
 
-def send_email(to_email: str, subject: str, html_body: str) -> bool:
-    """Sends one HTML email via Resend's HTTPS API. Returns True/False
-    instead of raising, so a bad send never crashes the caller
-    (scheduler loop, forgot-password endpoint, etc)."""
+def send_email(to_email: str, subject: str, html_body: str) -> tuple[bool, str]:
+    """Sends one HTML email via Resend's HTTPS API. Returns (success, detail)
+    instead of just a bool, so callers (including the debug endpoint) can
+    surface the exact failure reason rather than a generic message."""
     if not RESEND_API_KEY:
-        logger.warning("[notifier] RESEND_API_KEY not configured - skipping email to %s", to_email)
-        return False
+        msg = "RESEND_API_KEY not configured"
+        logger.warning("[notifier] %s - skipping email to %s", msg, to_email)
+        return False, msg
     try:
         resp = requests.post(
             "https://api.resend.com/emails",
@@ -41,16 +42,16 @@ def send_email(to_email: str, subject: str, html_body: str) -> bool:
         )
         resp.raise_for_status()
         logger.info("[notifier] email sent to %s", to_email)
-        return True
+        return True, "sent"
     except requests.exceptions.HTTPError as e:
         # Resend returns a JSON body with the actual reason (e.g. "you can only
         # send to your own verified address on the shared onboarding domain")
         detail = e.response.text if e.response is not None else str(e)
         logger.error("[notifier] email failed for %s: %s", to_email, detail)
-        return False
+        return False, detail
     except Exception as e:
         logger.error("[notifier] email failed for %s: %s", to_email, e)
-        return False
+        return False, str(e)
 
 
 def send_telegram(chat_id: str, text: str) -> bool:
