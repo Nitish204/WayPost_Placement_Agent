@@ -295,6 +295,9 @@
         <label>Password</label>
         <input type="password" id="login-password" required placeholder="••••••••" />
         <button class="btn-primary" type="submit" id="login-btn">Log in</button>
+        <div style="text-align:center;margin-top:16px;">
+          <a href="#" onclick="switchTab('forgot');return false;" style="font-size:12.5px;color:var(--slate);">Forgot password?</a>
+        </div>
       </form>
 
       <form id="register-form" onsubmit="return handleRegister(event)" style="display:none;">
@@ -310,6 +313,23 @@
         <label>Preferred locations</label>
         <input type="text" id="reg-locations" required placeholder="Bangalore, Remote" />
         <button class="btn-primary" type="submit" id="register-btn">Create account</button>
+      </form>
+
+      <form id="forgot-form" onsubmit="return handleForgotPassword(event)" style="display:none;">
+        <p class="sub" style="margin:0 0 4px;">Enter the email on your account and we'll send a reset link.</p>
+        <label>Email</label>
+        <input type="email" id="forgot-email" required placeholder="priya@email.com" />
+        <button class="btn-primary" type="submit" id="forgot-btn">Send reset link</button>
+        <div style="text-align:center;margin-top:16px;">
+          <a href="#" onclick="switchTab('login');return false;" style="font-size:12.5px;color:var(--slate);">Back to log in</a>
+        </div>
+      </form>
+
+      <form id="reset-form" onsubmit="return handleResetPassword(event)" style="display:none;">
+        <p class="sub" style="margin:0 0 4px;">Choose a new password for your account.</p>
+        <label>New password</label>
+        <input type="password" id="reset-password" required minlength="8" placeholder="At least 8 characters" />
+        <button class="btn-primary" type="submit" id="reset-btn">Update password</button>
       </form>
 
       <div id="auth-msg"></div>
@@ -376,6 +396,9 @@ function switchTab(tab){
   document.getElementById('tab-register').classList.toggle('active', tab==='register');
   document.getElementById('login-form').style.display = tab==='login' ? 'block' : 'none';
   document.getElementById('register-form').style.display = tab==='register' ? 'block' : 'none';
+  document.getElementById('forgot-form').style.display = tab==='forgot' ? 'block' : 'none';
+  document.getElementById('reset-form').style.display = tab==='reset' ? 'block' : 'none';
+  document.querySelector('.tabs').style.display = (tab==='forgot' || tab==='reset') ? 'none' : 'flex';
   document.getElementById('auth-msg').innerHTML = '';
 }
 
@@ -426,6 +449,35 @@ async function handleRegister(e){
     onAuthed(data);
   }catch(err){ showMsg('auth-msg', err.message, false); }
   setBtnLoading('register-btn', false, 'Create account');
+  return false;
+}
+
+async function handleForgotPassword(e){
+  e.preventDefault();
+  setBtnLoading('forgot-btn', true);
+  const fd = new FormData();
+  fd.append('email', document.getElementById('forgot-email').value);
+  try{
+    const data = await api('/auth/forgot-password', {method:'POST', body: fd});
+    showMsg('auth-msg', data.message, true);
+  }catch(err){ showMsg('auth-msg', err.message, false); }
+  setBtnLoading('forgot-btn', false, 'Send reset link');
+  return false;
+}
+
+async function handleResetPassword(e){
+  e.preventDefault();
+  setBtnLoading('reset-btn', true);
+  const fd = new FormData();
+  fd.append('token', window._resetToken || '');
+  fd.append('new_password', document.getElementById('reset-password').value);
+  try{
+    const data = await api('/auth/reset-password', {method:'POST', body: fd});
+    showMsg('auth-msg', data.message + ' Redirecting to log in…', true);
+    history.replaceState(null, '', window.location.pathname);
+    setTimeout(() => switchTab('login'), 1500);
+  }catch(err){ showMsg('auth-msg', err.message, false); }
+  setBtnLoading('reset-btn', false, 'Update password');
   return false;
 }
 
@@ -529,7 +581,14 @@ async function searchJobs(){
   }catch(err){ box.innerHTML = `<div class="msg err">${err.message}</div>`; }
 }
 
-if(token){ onAuthed({access_token: token, user:{name:''}}); }
+const urlParams = new URLSearchParams(window.location.search);
+const resetTokenFromUrl = urlParams.get('reset_token');
+if(resetTokenFromUrl){
+  window._resetToken = resetTokenFromUrl;
+  switchTab('reset');
+}else if(token){
+  onAuthed({access_token: token, user:{name:''}});
+}
 </script>
 </body>
 </html>
