@@ -147,9 +147,9 @@ def forgot_password(
     reset_url = f"{frontend_base}/?reset_token={raw_token}" if frontend_base else f"?reset_token={raw_token}"
 
     subject, html = format_reset_email(user.name or "there", reset_url)
-    sent = send_email(user.email, subject, html)
+    sent, detail = send_email(user.email, subject, html)
     if not sent:
-        logger.warning(f"[auth] reset email failed to send for user_id={user.id} - check RESEND_API_KEY is set")
+        logger.warning(f"[auth] reset email failed to send for user_id={user.id}: {detail}")
 
     return generic_response
 
@@ -307,6 +307,31 @@ def seed_sample(
     after setup, before configuring real GREENHOUSE_BOARDS/LEVER_BOARDS/
     ADZUNA keys - no external calls, no API keys required."""
     return seed_sample_jobs(db)
+
+
+@app.post("/debug/test-email")
+def debug_test_email(
+    current_user: UserProfile = Depends(get_current_user),
+):
+    """TEMPORARY diagnostic endpoint - remove before considering this
+    production-ready. Sends a real test email to the logged-in user's
+    own address and returns Resend's ACTUAL response/error instead of
+    the deliberately generic message /auth/forgot-password gives, so
+    the exact failure reason (missing key, unverified recipient, bad
+    domain, etc) is visible in one request instead of digging through
+    server logs."""
+    sent, detail = send_email(
+        current_user.email,
+        "Waypost test email",
+        f"<p>Hi {current_user.name or 'there'},</p><p>If you're reading this, Resend is configured correctly.</p>",
+    )
+    return {
+        "sent": sent,
+        "detail": detail,
+        "sent_to": current_user.email,
+        "resend_from_configured": os.getenv("RESEND_FROM", "onboarding@resend.dev"),
+        "resend_api_key_present": bool(os.getenv("RESEND_API_KEY")),
+    }
 
 
 @app.get("/health")
