@@ -24,9 +24,11 @@ from app.db import init_db, get_session, Job, UserProfile
 from app.core.resume_parser import parse_resume
 from app.core.ats_scorer import compute_ats_score
 from app.core.matcher import find_matches
+from app.core.notifier import send_email, format_reset_email
 from app.core.ingest import run_ingestion_cycle, seed_sample_jobs
 from app.core.auth import (
     hash_password, verify_password, create_access_token, get_current_user,
+    generate_reset_token, verify_reset_token,
 )
 from app.agent import run_agent
 from app.scheduler import start_scheduler, stop_scheduler
@@ -120,6 +122,60 @@ def me(current_user: UserProfile = Depends(get_current_user)):
         "telegram_linked": bool(current_user.telegram_chat_id),
         "match_score_threshold": current_user.match_score_threshold,
     }
+
+
+@app.post("/auth/forgot-password")
+def forgot_password(
+    email: str = Form(...),
+    db: Session = Depends(get_session),
+):
+    """Always returns the same generic message regardless of whether the
+    email exists - this prevents using this endpoint to check which
+    emails are registered (a common enumeration attack)."""
+    generic_response = {"message": "If an account with that email exists, a reset link has been sent."}
+
+    user = db.query(UserProfile).filter(UserProfile.email == email).first()
+    if not user:
+        return generic_response
+
+    raw_token, token_hash, expires = generate_reset_token()
+    user.reset_token_hash = token_hash
+    user.reset_token_expires = expires
+    db.commit()
+
+    frontend_base = os.getenv("FRONTEND_BASE_URL", "").rstrip("/")
+    reset_url = f"{frontend_base}/?reset_token={raw_token}" if frontend_base else f"?reset_token={raw_token}"
+
+    subject, html = format_reset_email(user.name or "there", reset_url)
+    sent = send_email(user.email, subject, html)
+    if not sent:
+        logger.warning(f"[auth] reset email failed to send for user_id={user.id} - SMTP may not be configured")
+
+    return generic_response
+
+
+@app.post("/auth/reset-password")
+def reset_password(
+    token: str = Form(...),
+    new_password: str = Form(..., min_length=8),
+    db: Session = Depends(get_session),
+):
+    user = db.query(UserProfile).filter(UserProfile.reset_token_hash.isnot(None)).all()
+    matched_user = None
+    for candidate in user:
+        if verify_reset_token(token, candidate.reset_token_hash, candidate.reset_token_expires):
+            matched_user = candidate
+            break
+
+    if not matched_user:
+        raise HTTPException(400, "This reset link is invalid or has expired. Request a new one.")
+
+    matched_user.hashed_password = hash_password(new_password)
+    matched_user.reset_token_hash = None
+    matched_user.reset_token_expires = None
+    db.commit()
+
+    return {"message": "Password updated. You can now log in with your new password."}
 
 
 # ---------------------------------------------------------------------
