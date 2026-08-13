@@ -54,6 +54,8 @@ class UserProfile(Base):
     notify_email = Column(Boolean, default=True)
     notify_telegram = Column(Boolean, default=True)
     match_score_threshold = Column(Float, default=40.0)  # min match_score to trigger a notification
+    reset_token_hash = Column(String, nullable=True)  # sha256 of the raw token emailed to the user, never store the raw token
+    reset_token_expires = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=dt.datetime.utcnow)
 
 
