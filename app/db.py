@@ -11,9 +11,22 @@ from sqlalchemy import (
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./placements.db")
+IS_SQLITE = "sqlite" in DATABASE_URL
 
+# pool_pre_ping: tests each connection with a lightweight query before
+# handing it to a request, transparently reconnecting if it's dead -
+# this is the fix for "SSL connection has been closed unexpectedly"
+# errors, which happen because managed Postgres providers (Neon, RDS,
+# Supabase, etc.) silently close idle connections after a timeout, but
+# SQLAlchemy's pool doesn't know that and tries to reuse the stale one.
+# pool_recycle: proactively drops+reopens connections older than this
+# many seconds, so we recycle before the provider's own timeout hits
+# rather than only reacting after a request already failed once.
 engine = create_engine(
-    DATABASE_URL, connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {}
+    DATABASE_URL,
+    connect_args={"check_same_thread": False} if IS_SQLITE else {},
+    pool_pre_ping=True,
+    pool_recycle=180 if not IS_SQLITE else -1,
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
