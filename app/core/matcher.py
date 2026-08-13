@@ -9,19 +9,83 @@ text and job description for semantic ranking. This avoids needing an
 external embeddings API for the MVP - swap in real embeddings + a
 vector DB (pgvector/Pinecone) later for better semantic matching.
 """
+import json
+import difflib
+from pathlib import Path
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
+DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+FUZZY_MATCH_THRESHOLD = 0.82  # 0-1 similarity ratio; tuned to catch typos/near-misses without over-matching
+
+
+def _load_city_aliases() -> dict:
+    """Loads app/data/city_aliases.json: canonical city -> list of
+    alternate names (e.g. 'bangalore' -> ['bengaluru', 'blr'])."""
+    try:
+        with open(DATA_DIR / "city_aliases.json") as f:
+            raw = json.load(f)
+        return {k: v for k, v in raw.items() if not k.startswith("_")}
+    except Exception:
+        return {}
+
+
+_CITY_ALIASES = _load_city_aliases()
+
+
+def _expand_with_aliases(location: str) -> set[str]:
+    """Given one location string the user typed, returns the set of all
+    names it could reasonably also appear as in a job listing - itself
+    plus any known aliases in either direction. E.g. 'bangalore' expands
+    to {'bangalore', 'bengaluru', 'blr'}, and typing 'bengaluru' expands
+    to the same set (alias lookup works both ways)."""
+    loc = location.strip().lower()
+    if not loc:
+        return set()
+    expanded = {loc}
+    for canonical, aliases in _CITY_ALIASES.items():
+        names = {canonical, *aliases}
+        if loc in names:
+            expanded |= names
+    return expanded
+
+
+def _fuzzy_contains(job_loc_lower: str, candidate: str) -> bool:
+    """Catches near-misses that aren't exact substrings - typos, minor
+    spelling variants ('hydrabad' vs 'hyderabad'), etc. Compares the
+    candidate against each word/phrase chunk in the job's location
+    string rather than the whole string at once, since a short city name
+    compared against a long 'City, State, Country' string would always
+    score low on raw ratio."""
+    if candidate in job_loc_lower:
+        return True
+    chunks = [c.strip() for c in job_loc_lower.replace("/", ",").split(",") if c.strip()]
+    chunks.append(job_loc_lower)  # also try the whole string, cheap and occasionally useful
+    for chunk in chunks:
+        ratio = difflib.SequenceMatcher(None, candidate, chunk).ratio()
+        if ratio >= FUZZY_MATCH_THRESHOLD:
+            return True
+    return False
+
 
 def location_matches(job_location: str, wanted_locations: list[str]) -> bool:
-    """Loose match: remote jobs always pass; otherwise substring match
-    against any of the user's preferred locations."""
+    """Remote jobs always pass. Otherwise: for each location the user
+    wants, expand it to known aliases (e.g. Bangalore <-> Bengaluru),
+    then check for a substring match, falling back to fuzzy matching to
+    catch typos/spelling variants the alias list doesn't cover."""
     if not wanted_locations:
         return True
     job_loc_lower = (job_location or "").lower()
-    if "remote" in job_loc_lower:
+    if "remote" in job_loc_lower or "work from home" in job_loc_lower or "wfh" in job_loc_lower:
         return True
-    return any(loc.strip().lower() in job_loc_lower for loc in wanted_locations if loc.strip())
+
+    for loc in wanted_locations:
+        if not loc.strip():
+            continue
+        for candidate in _expand_with_aliases(loc):
+            if _fuzzy_contains(job_loc_lower, candidate):
+                return True
+    return False
 
 
 def title_prefilter(job_title: str, wanted_titles: list[str]) -> bool:
