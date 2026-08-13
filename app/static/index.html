@@ -5,334 +5,268 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Waypost — find the role that's actually yours</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Newsreader:ital,wght@1,400;1,500&family=Inter:wght@400;500;600&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Instrument+Serif:ital@1&family=Inter:wght@400;500;600;700&display=swap');
 
   :root{
-    --ink:#0B1220;
-    --ink-raised:#131C30;
-    --ink-card:#161F35;
-    --bone:#F3EFE6;
-    --bone-dim:#C9CBD6;
-    --slate:#7C879E;
-    --brass:#C9A15A;
-    --brass-bright:#E4C078;
-    --line:rgba(243,239,230,0.10);
-    --line-strong:rgba(243,239,230,0.18);
-    --ok-bg:rgba(95,174,130,0.14);
-    --ok-text:#7BC79B;
-    --err-bg:rgba(200,90,70,0.14);
-    --err-text:#E08268;
+    --void:#07060D;
+    --surface:#100D1C;
+    --surface-2:#161228;
+    --bone:#F5F3FA;
+    --bone-dim:#B9B4CC;
+    --mist:#7A7593;
+    --indigo:#6D5DFC;
+    --magenta:#FF4FA3;
+    --cyan:#22D3EE;
+    --amber:#FFB84D;
+    --line:rgba(245,243,250,0.09);
+    --line-strong:rgba(245,243,250,0.16);
+    --ok-bg:rgba(45,212,155,0.12); --ok-text:#5EEAB0;
+    --err-bg:rgba(255,79,110,0.12); --err-text:#FF8FA3;
   }
   *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
   body{
-    margin:0;
-    background:var(--ink);
-    color:var(--bone);
-    font-family:'Inter',sans-serif;
-    min-height:100vh;
-    -webkit-font-smoothing:antialiased;
+    margin:0; background:var(--void); color:var(--bone);
+    font-family:'Inter',sans-serif; min-height:100vh; -webkit-font-smoothing:antialiased;
+    overflow-x:hidden;
   }
   h1,h2,h3,.display{font-family:'Space Grotesk',sans-serif;}
-  .accent-phrase{font-family:'Newsreader',serif;font-style:italic;color:var(--brass-bright);font-weight:400;}
-  .wrap{max-width:1120px;margin:0 auto;padding:0 24px;}
-  @media (prefers-reduced-motion: reduce){
-    *{animation-duration:0.01ms !important; animation-iteration-count:1 !important; transition-duration:0.01ms !important;}
-  }
+  .accent{font-family:'Instrument Serif',serif;font-style:italic;font-weight:400;
+    background:linear-gradient(100deg,var(--magenta),var(--amber));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;}
+  .wrap{max-width:1160px;margin:0 auto;padding:0 24px;}
+  @media (prefers-reduced-motion: reduce){ *{animation-duration:0.01ms !important; animation-iteration-count:1 !important; transition-duration:0.01ms !important;} }
 
-  header{border-bottom:1px solid var(--line); padding:20px 0;}
+  /* ============ MESH BACKGROUND ============ */
+  .mesh-bg{position:fixed;inset:0;z-index:0;overflow:hidden;background:var(--void);}
+  .blob{position:absolute;border-radius:50%;filter:blur(90px);opacity:0.55;will-change:transform;}
+  .b1{width:52vw;height:52vw;background:radial-gradient(circle,var(--indigo),transparent 70%);top:-12%;left:-10%;animation:drift1 22s ease-in-out infinite;}
+  .b2{width:44vw;height:44vw;background:radial-gradient(circle,var(--magenta),transparent 70%);top:8%;right:-14%;animation:drift2 26s ease-in-out infinite;}
+  .b3{width:40vw;height:40vw;background:radial-gradient(circle,var(--cyan),transparent 70%);bottom:-16%;left:8%;animation:drift3 19s ease-in-out infinite;}
+  .b4{width:30vw;height:30vw;background:radial-gradient(circle,var(--amber),transparent 70%);bottom:-6%;right:6%;opacity:0.35;animation:drift1 30s ease-in-out infinite reverse;}
+  @keyframes drift1{0%,100%{transform:translate(0,0) scale(1);}50%{transform:translate(6%,8%) scale(1.12);}}
+  @keyframes drift2{0%,100%{transform:translate(0,0) scale(1);}50%{transform:translate(-8%,6%) scale(1.08);}}
+  @keyframes drift3{0%,100%{transform:translate(0,0) scale(1);}50%{transform:translate(5%,-7%) scale(1.15);}}
+  .grain{position:fixed;inset:0;z-index:1;pointer-events:none;opacity:0.05;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");}
+
+  header{position:relative;z-index:5;border-bottom:1px solid var(--line);padding:20px 0;}
   header .wrap{display:flex;align-items:center;justify-content:space-between;}
   .brand{font-size:19px;font-weight:600;letter-spacing:-0.01em;display:flex;align-items:center;gap:9px;}
-  .brand .mark{width:9px;height:9px;border-radius:50%;background:var(--brass);box-shadow:0 0 12px 2px rgba(201,161,90,0.55);animation:markPulse 2.4s ease-in-out infinite;}
-  @keyframes markPulse{0%,100%{box-shadow:0 0 12px 2px rgba(201,161,90,0.55);}50%{box-shadow:0 0 18px 5px rgba(228,192,120,0.8);}}
-  .brand small{font-family:'Inter',sans-serif;font-weight:500;font-size:10.5px;color:var(--slate);letter-spacing:0.1em;text-transform:uppercase;margin-left:6px;}
+  .brand .mark{width:9px;height:9px;border-radius:50%;background:linear-gradient(135deg,var(--indigo),var(--magenta));box-shadow:0 0 14px 3px rgba(109,93,252,0.6);animation:markPulse 2.4s ease-in-out infinite;}
+  @keyframes markPulse{0%,100%{box-shadow:0 0 14px 3px rgba(109,93,252,0.6);}50%{box-shadow:0 0 20px 6px rgba(255,79,163,0.7);}}
+  .brand small{font-family:'Inter',sans-serif;font-weight:500;font-size:10.5px;color:var(--mist);letter-spacing:0.1em;text-transform:uppercase;margin-left:6px;}
   #userbar{display:none;align-items:center;gap:16px;font-size:14px;color:var(--bone-dim);}
-  #userbar button{
-    font-family:'Inter',sans-serif;font-size:13px;color:var(--bone);background:none;border:1px solid var(--line-strong);
-    padding:7px 15px;border-radius:7px;cursor:pointer;transition:border-color 0.15s, background 0.15s;
-  }
-  #userbar button:hover{border-color:var(--brass);background:rgba(201,161,90,0.08);}
+  #userbar button{font-family:'Inter',sans-serif;font-size:13px;color:var(--bone);background:none;border:1px solid var(--line-strong);padding:7px 15px;border-radius:8px;cursor:pointer;transition:.2s;}
+  #userbar button:hover{border-color:var(--indigo);background:rgba(109,93,252,0.1);}
 
-  #auth-screen{display:none;min-height:100vh;}
-  #auth-screen.visible{display:grid;grid-template-columns:1.1fr 1fr;}
-  @media(max-width:860px){ #auth-screen.visible{grid-template-columns:1fr;} .auth-visual{min-height:260px;} }
+  /* ============ AUTH SCREEN ============ */
+  #auth-screen{position:relative;z-index:5;display:none;min-height:100vh;}
+  #auth-screen.visible{display:grid;grid-template-columns:1.05fr 1fr;}
+  @media(max-width:900px){#auth-screen.visible{grid-template-columns:1fr;} .auth-copy{padding:48px 32px 20px;} }
 
-  .auth-visual{
-    background:
-      radial-gradient(ellipse 60% 50% at 15% 20%, rgba(201,161,90,0.35) 0%, transparent 60%),
-      radial-gradient(ellipse 55% 45% at 85% 15%, rgba(122,90,220,0.32) 0%, transparent 60%),
-      radial-gradient(ellipse 70% 60% at 50% 100%, rgba(90,180,220,0.28) 0%, transparent 65%),
-      radial-gradient(ellipse 120% 90% at 30% 0%, #182444 0%, var(--ink) 68%);
-    background-size:200% 200%, 200% 200%, 200% 200%, 100% 100%;
-    animation:auroraShift 16s ease-in-out infinite;
-    position:relative; overflow:hidden;
-    display:flex; flex-direction:column; justify-content:center;
-    padding:56px;
-  }
-  @keyframes auroraShift{
-    0%{background-position:0% 0%, 100% 0%, 50% 100%, 0 0;}
-    50%{background-position:30% 30%, 70% 40%, 60% 70%, 0 0;}
-    100%{background-position:0% 0%, 100% 0%, 50% 100%, 0 0;}
-  }
-  .auth-visual::before{
-    content:"";position:absolute;inset:0;
-    background-image:radial-gradient(rgba(243,239,230,0.07) 1px, transparent 1px);
-    background-size:26px 26px;
-    mask-image:radial-gradient(ellipse 80% 70% at 30% 40%, black 30%, transparent 75%);
-  }
-  .orb{position:absolute;border-radius:50%;filter:blur(1px);opacity:0.7;pointer-events:none;}
-  .orb1{width:6px;height:6px;background:var(--brass-bright);top:18%;left:12%;box-shadow:0 0 14px 3px rgba(228,192,120,0.7);animation:float1 7s ease-in-out infinite;}
-  .orb2{width:4px;height:4px;background:#8F7FE8;top:62%;left:78%;box-shadow:0 0 12px 3px rgba(143,127,232,0.7);animation:float2 9s ease-in-out infinite;}
-  .orb3{width:5px;height:5px;background:#6BC4E0;top:78%;left:22%;box-shadow:0 0 12px 3px rgba(107,196,224,0.65);animation:float3 8s ease-in-out infinite;}
-  .orb4{width:3.5px;height:3.5px;background:var(--bone);top:30%;left:70%;box-shadow:0 0 10px 2px rgba(243,239,230,0.6);animation:float2 10s ease-in-out infinite reverse;}
-  @keyframes float1{0%,100%{transform:translate(0,0);}50%{transform:translate(14px,-18px);}}
-  @keyframes float2{0%,100%{transform:translate(0,0);}50%{transform:translate(-16px,14px);}}
-  @keyframes float3{0%,100%{transform:translate(0,0);}50%{transform:translate(10px,16px);}}
-  .visual-eyebrow{font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:var(--brass-bright);font-weight:600;margin-bottom:18px;position:relative;display:flex;align-items:center;gap:8px;}
-  .visual-eyebrow .pulse-dot{width:6px;height:6px;border-radius:50%;background:var(--brass-bright);box-shadow:0 0 8px 2px rgba(228,192,120,0.8);animation:pulseDot 1.8s ease-in-out infinite;}
-  @keyframes pulseDot{0%,100%{opacity:1;transform:scale(1);}50%{opacity:0.4;transform:scale(0.7);}}
-  .visual-head{
-    font-size:38px;line-height:1.18;font-weight:600;max-width:440px;margin:0 0 14px;position:relative;
-    background:linear-gradient(100deg, var(--bone) 30%, var(--brass-bright) 50%, #8F7FE8 65%, var(--bone) 85%);
-    background-size:300% 100%;
-    -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
-    animation:shimmer 7s linear infinite;
-  }
-  @keyframes shimmer{ 0%{background-position:0% 0;} 100%{background-position:300% 0;} }
-  .visual-head .accent-phrase{-webkit-text-fill-color:var(--brass-bright);background:none;}
-  .visual-sub{font-size:15px;color:var(--slate);max-width:380px;line-height:1.6;margin:0 0 40px;position:relative;}
+  .auth-copy{display:flex;flex-direction:column;justify-content:center;padding:60px;perspective:1400px;}
+  .reveal{opacity:0;transform:translateY(28px);animation:cinReveal 0.9s cubic-bezier(0.16,1,0.3,1) forwards;}
+  @keyframes cinReveal{to{opacity:1;transform:translateY(0);}}
+  .eyebrow{font-size:12px;letter-spacing:0.16em;text-transform:uppercase;color:var(--bone-dim);font-weight:600;margin-bottom:22px;display:flex;align-items:center;gap:9px;animation-delay:0.1s;}
+  .eyebrow .dot{width:6px;height:6px;border-radius:50%;background:var(--cyan);box-shadow:0 0 10px 3px rgba(34,211,238,0.7);animation:markPulse 1.8s ease-in-out infinite;}
+  .headline{font-size:clamp(34px,4.2vw,52px);line-height:1.08;font-weight:700;letter-spacing:-0.02em;margin:0 0 20px;animation-delay:0.22s;}
+  .headline .word{display:inline-block;opacity:0;transform:translateY(100%);animation:wordUp 0.7s cubic-bezier(0.16,1,0.3,1) forwards;}
+  @keyframes wordUp{to{opacity:1;transform:translateY(0);}}
+  .sub-copy{font-size:16px;color:var(--mist);max-width:420px;line-height:1.65;margin:0 0 44px;animation-delay:0.5s;}
+  .stat-row{display:flex;gap:32px;animation-delay:0.65s;}
+  .stat{}
+  .stat .num{font-family:'Space Grotesk',sans-serif;font-size:26px;font-weight:700;background:linear-gradient(100deg,var(--bone),var(--cyan));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;}
+  .stat .lbl{font-size:11.5px;color:var(--mist);margin-top:2px;letter-spacing:0.02em;}
 
-  .route-svg{position:relative;width:100%;max-width:440px;}
-  .route-path{
-    fill:none;stroke:var(--brass);stroke-width:1.6;stroke-linecap:round;
-    stroke-dasharray:600; stroke-dashoffset:600;
-    animation:draw 2.6s cubic-bezier(0.65,0,0.35,1) 0.3s forwards;
-  }
-  @keyframes draw{ to{ stroke-dashoffset:0; } }
-  .route-node{ opacity:0; animation:pop 0.5s ease forwards; }
-  .route-node.n1{ animation-delay:0.35s; }
-  .route-node.n2{ animation-delay:1.15s; }
-  .route-node.n3{ animation-delay:1.75s; }
-  .route-node.n4{ animation-delay:2.45s; }
-  @keyframes pop{ from{opacity:0; transform:scale(0);} to{opacity:1; transform:scale(1);} }
-  .route-node circle.ring{ fill:none; stroke:var(--brass); stroke-width:1; opacity:0.5; }
-  .route-node circle.dot{ fill:var(--brass-bright); }
-  .route-node.dest circle.dot{ fill:var(--brass); }
-  .route-traveler{
-    fill:var(--bone); r:3.2;
-    offset-path:path('M20,190 C 90,60 150,230 220,110 S 360,40 420,95');
-    animation:travel 2.6s cubic-bezier(0.65,0,0.35,1) 0.3s forwards, glow 1.4s ease-in-out infinite 3s;
-  }
-  @keyframes travel{ from{offset-distance:0%;} to{offset-distance:100%;} }
-  @keyframes glow{ 0%,100%{filter:drop-shadow(0 0 2px rgba(243,239,230,0.6));} 50%{filter:drop-shadow(0 0 7px rgba(243,239,230,0.95));} }
-
-  .auth-form-side{display:flex;align-items:center;justify-content:center;padding:56px 40px;position:relative;}
+  .auth-form-side{position:relative;z-index:5;display:flex;align-items:center;justify-content:center;padding:56px 40px;perspective:1400px;}
+  .card-tilt-wrap{perspective:1400px;}
   .auth-card{
-    width:100%;max-width:380px;position:relative;padding:34px 32px;border-radius:18px;
-    background:linear-gradient(180deg, rgba(22,31,53,0.6), rgba(19,28,48,0.4));
-    border:1px solid var(--line);
-    backdrop-filter:blur(6px);
-    animation:cardGlow 5s ease-in-out infinite;
+    width:100%;max-width:390px;padding:36px 34px;border-radius:20px;position:relative;
+    background:linear-gradient(155deg, rgba(22,18,40,0.75), rgba(16,13,28,0.55));
+    border:1px solid var(--line-strong);
+    backdrop-filter:blur(18px);
+    box-shadow:0 30px 80px -30px rgba(109,93,252,0.35), 0 0 0 1px rgba(255,255,255,0.02) inset;
+    transform-style:preserve-3d;
+    transition:transform 0.15s ease-out, box-shadow 0.3s;
+    opacity:0; animation:cardEntrance 1s cubic-bezier(0.16,1,0.3,1) 0.35s forwards;
   }
-  @keyframes cardGlow{
-    0%,100%{box-shadow:0 0 0 1px rgba(201,161,90,0.08), 0 20px 60px -20px rgba(201,161,90,0.15);}
-    50%{box-shadow:0 0 0 1px rgba(201,161,90,0.22), 0 24px 70px -18px rgba(201,161,90,0.28);}
+  @keyframes cardEntrance{from{opacity:0;transform:translateY(40px) scale(0.94) rotateX(6deg);}to{opacity:1;transform:translateY(0) scale(1) rotateX(0);}}
+  .auth-card::before{
+    content:"";position:absolute;inset:-1px;border-radius:20px;padding:1px;z-index:-1;
+    background:linear-gradient(135deg,var(--indigo),var(--magenta),var(--cyan));
+    -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+    -webkit-mask-composite:xor;mask-composite:exclude;opacity:0.5;
   }
-  .auth-card .brand{margin-bottom:36px;}
-  .auth-card h1{font-size:26px;font-weight:600;margin:0 0 6px;letter-spacing:-0.01em;}
-  .auth-card p.sub{color:var(--slate);font-size:13.5px;margin:0 0 30px;line-height:1.5;}
+  .auth-card .brand{margin-bottom:32px;transform:translateZ(30px);}
+  .auth-card h1{font-size:25px;font-weight:700;margin:0 0 6px;letter-spacing:-0.01em;transform:translateZ(24px);}
+  .auth-card p.sub{color:var(--mist);font-size:13.5px;margin:0 0 26px;line-height:1.5;transform:translateZ(18px);}
 
-  .tabs{display:flex;gap:2px;background:var(--ink-raised);border:1px solid var(--line);border-radius:9px;padding:3px;margin-bottom:28px;}
-  .tabs button{
-    flex:1;border:none;background:none;padding:9px 0;font-family:'Inter',sans-serif;font-size:13px;font-weight:500;
-    color:var(--slate);border-radius:7px;cursor:pointer;transition:all 0.18s;
-  }
-  .tabs button.active{background:var(--brass);color:var(--ink);font-weight:600;}
+  .tabs{display:flex;gap:2px;background:rgba(0,0,0,0.25);border:1px solid var(--line);border-radius:10px;padding:3px;margin-bottom:26px;transform:translateZ(20px);}
+  .tabs button{flex:1;border:none;background:none;padding:9px 0;font-family:'Inter',sans-serif;font-size:13px;font-weight:500;color:var(--mist);border-radius:8px;cursor:pointer;transition:.2s;}
+  .tabs button.active{background:linear-gradient(120deg,var(--indigo),var(--magenta));color:#fff;font-weight:600;}
 
-  label{display:block;font-size:11px;font-weight:600;color:var(--slate);margin:18px 0 7px;text-transform:uppercase;letter-spacing:0.06em;}
+  label{display:block;font-size:11px;font-weight:600;color:var(--mist);margin:16px 0 7px;text-transform:uppercase;letter-spacing:0.06em;transform:translateZ(14px);}
   label:first-of-type{margin-top:0;}
   input{
-    width:100%;padding:11px 14px;border:1px solid var(--line-strong);border-radius:9px;
-    font-family:'Inter',sans-serif;font-size:14px;background:var(--ink-raised);color:var(--bone);
-    transition:border-color 0.15s, box-shadow 0.15s;
+    width:100%;padding:11px 14px;border:1px solid var(--line-strong);border-radius:10px;
+    font-family:'Inter',sans-serif;font-size:14px;background:rgba(0,0,0,0.28);color:var(--bone);
+    transition:border-color .18s, box-shadow .18s; transform:translateZ(14px);
   }
-  input::placeholder{color:#4E576B;}
-  input:focus{outline:none;border-color:var(--brass);box-shadow:0 0 0 3px rgba(201,161,90,0.14);}
-  .hint{font-size:11.5px;color:var(--slate);margin-top:5px;font-weight:400;text-transform:none;letter-spacing:0;}
+  input::placeholder{color:#57517A;}
+  input:focus{outline:none;border-color:var(--indigo);box-shadow:0 0 0 3px rgba(109,93,252,0.18);}
+  .hint{font-size:11.5px;color:var(--mist);margin-top:5px;font-weight:400;text-transform:none;letter-spacing:0;}
 
   .btn-primary{
-    width:100%;margin-top:26px;padding:13px 0;border:none;border-radius:9px;
-    background:linear-gradient(100deg, var(--brass) 0%, var(--brass-bright) 50%, var(--brass) 100%);
+    width:100%;margin-top:24px;padding:13px 0;border:none;border-radius:10px;
+    background:linear-gradient(110deg,var(--indigo) 0%,var(--magenta) 50%,var(--indigo) 100%);
     background-size:220% 100%;
-    color:var(--ink);font-family:'Inter',sans-serif;font-size:14px;font-weight:700;cursor:pointer;letter-spacing:0.01em;
-    transition:background-position 0.5s ease, transform 0.1s;
-    box-shadow:0 6px 20px -6px rgba(201,161,90,0.5);
+    color:#fff;font-family:'Inter',sans-serif;font-size:14px;font-weight:700;cursor:pointer;letter-spacing:0.01em;
+    transition:background-position .5s ease, transform .1s, box-shadow .25s;
+    box-shadow:0 10px 30px -10px rgba(109,93,252,0.6); transform:translateZ(20px);
   }
-  .btn-primary:hover{background-position:100% 0;box-shadow:0 8px 26px -6px rgba(228,192,120,0.65);}
-  .btn-primary:active{transform:scale(0.98);}
-  .btn-secondary{
-    padding:10px 18px;background:none;border:1px solid var(--line-strong);border-radius:9px;color:var(--bone);
-    font-family:'Inter',sans-serif;font-size:13px;font-weight:500;cursor:pointer;transition:border-color 0.15s;
-  }
-  .btn-secondary:hover{border-color:var(--brass);}
+  .btn-primary:hover{background-position:100% 0;box-shadow:0 14px 36px -8px rgba(255,79,163,0.55);}
+  .btn-primary:active{transform:translateZ(20px) scale(0.98);}
+  .btn-secondary{padding:10px 18px;background:none;border:1px solid var(--line-strong);border-radius:9px;color:var(--bone);font-family:'Inter',sans-serif;font-size:13px;font-weight:500;cursor:pointer;transition:border-color .18s;}
+  .btn-secondary:hover{border-color:var(--indigo);}
 
   .msg{font-size:13px;padding:11px 13px;border-radius:9px;margin-top:16px;line-height:1.5;}
   .msg.err{background:var(--err-bg);color:var(--err-text);}
   .msg.ok{background:var(--ok-bg);color:var(--ok-text);}
 
-  #dashboard{display:none;padding:40px 0 90px;}
-  .grid{display:grid;grid-template-columns:330px 1fr;gap:24px;align-items:start;}
+  /* ============ DASHBOARD ============ */
+  #dashboard{position:relative;z-index:5;display:none;padding:40px 0 90px;}
+  .grid{display:grid;grid-template-columns:330px 1fr;gap:22px;align-items:start;}
   @media(max-width:820px){.grid{grid-template-columns:1fr;}}
 
   .card{
-    background:linear-gradient(180deg, var(--ink-card), var(--ink-raised));
-    border:1px solid var(--line);border-radius:16px;padding:26px;margin-bottom:20px;
-    animation:rise 0.5s cubic-bezier(0.2,0.9,0.3,1) both;
+    background:linear-gradient(155deg, rgba(22,18,40,0.7), rgba(16,13,28,0.5));
+    border:1px solid var(--line-strong);border-radius:18px;padding:26px;margin-bottom:20px;
+    backdrop-filter:blur(14px);
+    opacity:0;transform:translateY(24px);animation:riseIn 0.7s cubic-bezier(0.16,1,0.3,1) forwards;
   }
-  .card:nth-of-type(2){animation-delay:0.06s;}
-  @keyframes rise{ from{opacity:0; transform:translateY(10px);} to{opacity:1; transform:translateY(0);} }
-  .card h2{font-size:15.5px;margin:0 0 4px;font-weight:600;}
-  .card p.desc{font-size:12.5px;color:var(--slate);margin:0 0 18px;line-height:1.5;}
+  .card:nth-of-type(1){animation-delay:0.05s;} .card:nth-of-type(2){animation-delay:0.15s;} .card:nth-of-type(3){animation-delay:0.1s;}
+  @keyframes riseIn{to{opacity:1;transform:translateY(0);}}
+  .card h2{font-size:15.5px;margin:0 0 4px;font-weight:700;}
+  .card p.desc{font-size:12.5px;color:var(--mist);margin:0 0 18px;line-height:1.5;}
 
-  .dropzone{
-    border:1.5px dashed var(--line-strong);border-radius:12px;padding:24px;text-align:center;cursor:pointer;
-    transition:border-color 0.15s, background 0.15s;
-  }
-  .dropzone:hover{border-color:var(--brass);background:rgba(201,161,90,0.04);}
+  .dropzone{border:1.5px dashed var(--line-strong);border-radius:14px;padding:24px;text-align:center;cursor:pointer;transition:.2s;}
+  .dropzone:hover{border-color:var(--indigo);background:rgba(109,93,252,0.06);}
   .dropzone .fname{font-size:13px;font-weight:500;margin-top:6px;color:var(--bone-dim);}
-  .skill-pill{
-    display:inline-block;background:rgba(201,161,90,0.12);color:var(--brass-bright);font-size:11.5px;padding:5px 11px;
-    border:1px solid rgba(201,161,90,0.25);border-radius:20px;margin:3px 5px 0 0;font-weight:500;
-    transition:background 0.15s, box-shadow 0.15s, transform 0.15s;
-  }
-  .skill-pill:hover{background:rgba(201,161,90,0.22);box-shadow:0 0 12px -2px rgba(228,192,120,0.5);transform:translateY(-1px);}
+  .skill-pill{display:inline-block;background:rgba(109,93,252,0.14);color:#C4BBFF;font-size:11.5px;padding:5px 11px;border:1px solid rgba(109,93,252,0.3);border-radius:20px;margin:3px 5px 0 0;font-weight:500;transition:.2s;}
+  .skill-pill:hover{background:rgba(255,79,163,0.16);border-color:rgba(255,79,163,0.35);color:#FFB8D9;transform:translateY(-1px);}
 
   .toggle-row{display:flex;align-items:center;justify-content:space-between;padding:11px 0;border-top:1px solid var(--line);}
   .toggle-row:first-of-type{border-top:none;}
   .toggle-row span{font-size:13px;color:var(--bone-dim);}
   .switch{position:relative;width:38px;height:22px;flex-shrink:0;}
   .switch input{opacity:0;width:0;height:0;}
-  .slider{position:absolute;inset:0;background:var(--ink-raised);border:1px solid var(--line-strong);border-radius:22px;cursor:pointer;transition:0.15s;}
-  .slider:before{content:"";position:absolute;width:15px;height:15px;left:2px;top:2px;background:var(--bone);border-radius:50%;transition:0.15s;}
-  input:checked + .slider{background:var(--brass);border-color:var(--brass);}
-  input:checked + .slider:before{transform:translateX(17px);background:var(--ink);}
+  .slider{position:absolute;inset:0;background:rgba(0,0,0,0.3);border:1px solid var(--line-strong);border-radius:22px;cursor:pointer;transition:.2s;}
+  .slider:before{content:"";position:absolute;width:15px;height:15px;left:2px;top:2px;background:var(--bone);border-radius:50%;transition:.2s;}
+  input:checked + .slider{background:linear-gradient(120deg,var(--indigo),var(--magenta));border-color:transparent;}
+  input:checked + .slider:before{transform:translateX(17px);}
 
-  .job-card{
-    border:1px solid var(--line);border-radius:12px;padding:17px 19px;margin-bottom:10px;
-    transition:border-color 0.15s, transform 0.15s;
-  }
-  .job-card:hover{border-color:var(--line-strong);transform:translateX(2px);}
+  .job-card{border:1px solid var(--line);border-radius:14px;padding:17px 19px;margin-bottom:10px;transition:.2s;background:rgba(255,255,255,0.015);}
+  .job-card:hover{border-color:var(--indigo);transform:translateX(3px);box-shadow:0 8px 24px -12px rgba(109,93,252,0.4);}
   .job-card .row{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;}
   .job-card h3{font-size:14.5px;margin:0 0 2px;font-family:'Inter',sans-serif;font-weight:600;color:var(--bone);}
-  .job-card .meta{font-size:12px;color:var(--slate);margin:0;}
-  .score-badge{
-    flex-shrink:0;background:rgba(201,161,90,0.14);color:var(--brass-bright);border:1px solid rgba(201,161,90,0.3);
-    font-size:11.5px;font-weight:700;padding:5px 11px;border-radius:20px;
-  }
-  .job-card a{font-size:12px;color:var(--brass);text-decoration:none;font-weight:600;}
-  .job-card a:hover{color:var(--brass-bright);}
-  .job-card .desc{font-size:12.5px;color:var(--slate);margin:9px 0 0;line-height:1.55;}
+  .job-card .meta{font-size:12px;color:var(--mist);margin:0;}
+  .score-badge{flex-shrink:0;background:linear-gradient(120deg,rgba(109,93,252,0.2),rgba(255,79,163,0.2));color:#D9C9FF;border:1px solid rgba(109,93,252,0.35);font-size:11.5px;font-weight:700;padding:5px 11px;border-radius:20px;}
+  .job-card a{font-size:12px;color:var(--cyan);text-decoration:none;font-weight:600;}
+  .job-card a:hover{color:var(--bone);}
+  .job-card .desc{font-size:12.5px;color:var(--mist);margin:9px 0 0;line-height:1.55;}
 
   .search-row{display:flex;gap:8px;margin-bottom:18px;}
   .search-row input{flex:1;}
-  .search-row button{
-    background:var(--brass);color:var(--ink);border:none;border-radius:9px;padding:0 20px;font-size:13px;font-weight:700;
-    cursor:pointer;transition:background 0.15s;
-  }
-  .search-row button:hover{background:var(--brass-bright);}
-  .empty{font-size:13px;color:var(--slate);text-align:center;padding:30px 0;}
-  .note{font-size:11.5px;color:var(--slate);background:var(--ink-raised);border-radius:9px;padding:11px 13px;margin-top:14px;line-height:1.5;}
+  .search-row button{background:linear-gradient(120deg,var(--indigo),var(--magenta));color:#fff;border:none;border-radius:10px;padding:0 20px;font-size:13px;font-weight:700;cursor:pointer;transition:.2s;}
+  .search-row button:hover{filter:brightness(1.15);}
+  .empty{font-size:13px;color:var(--mist);text-align:center;padding:30px 0;}
+  .note{font-size:11.5px;color:var(--mist);background:rgba(0,0,0,0.2);border-radius:9px;padding:11px 13px;margin-top:14px;line-height:1.5;}
 
-  .spinner{width:15px;height:15px;border:2px solid rgba(243,239,230,0.25);border-top-color:var(--bone);border-radius:50%;display:inline-block;animation:spin 0.7s linear infinite;vertical-align:-3px;margin-right:6px;}
-  @keyframes spin{ to{transform:rotate(360deg);} }
+  .spinner{width:15px;height:15px;border:2px solid rgba(245,243,250,0.25);border-top-color:var(--bone);border-radius:50%;display:inline-block;animation:spin 0.7s linear infinite;vertical-align:-3px;margin-right:6px;}
+  @keyframes spin{to{transform:rotate(360deg);}}
 </style>
 </head>
 <body>
 
+<div class="mesh-bg"><div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div><div class="blob b4"></div></div>
+<div class="grain"></div>
+
 <header style="display:none;" id="dash-header">
   <div class="wrap">
     <div class="brand"><span class="mark"></span>Waypost <small>Placement agent</small></div>
-    <div id="userbar">
-      <span id="userbar-name"></span>
-      <button onclick="logout()">Log out</button>
-    </div>
+    <div id="userbar"><span id="userbar-name"></span><button onclick="logout()">Log out</button></div>
   </div>
 </header>
 
 <div id="auth-screen" class="visible">
-  <div class="auth-visual">
-    <div class="orb orb1"></div>
-    <div class="orb orb2"></div>
-    <div class="orb orb3"></div>
-    <div class="orb orb4"></div>
-    <div class="visual-eyebrow"><span class="pulse-dot"></span>Waypost &nbsp;·&nbsp; Placement agent</div>
-    <h1 class="visual-head">Every posting is a point on the map.<br/><span class="accent-phrase">We plot the route to yours.</span></h1>
-    <p class="visual-sub">New roles appear across the web every hour. Waypost tracks them quietly and marks the ones actually worth your time.</p>
-
-    <svg class="route-svg" viewBox="0 0 440 240" fill="none">
-      <path class="route-path" d="M20,190 C 90,60 150,230 220,110 S 360,40 420,95" />
-      <g class="route-node n1"><circle class="ring" cx="20" cy="190" r="9"/><circle class="dot" cx="20" cy="190" r="4"/></g>
-      <g class="route-node n2"><circle class="ring" cx="220" cy="110" r="7"/><circle class="dot" cx="220" cy="110" r="3.2"/></g>
-      <g class="route-node n3"><circle class="ring" cx="330" cy="60" r="7"/><circle class="dot" cx="330" cy="60" r="3.2"/></g>
-      <g class="route-node n4 dest"><circle class="ring" cx="420" cy="95" r="10"/><circle class="dot" cx="420" cy="95" r="4.5"/></g>
-      <circle class="route-traveler"/>
-    </svg>
+  <div class="auth-copy">
+    <div class="eyebrow reveal"><span class="dot"></span>Waypost · Placement agent</div>
+    <h1 class="headline reveal" id="headline-target"></h1>
+    <p class="sub-copy reveal">New roles appear across the web every hour. Waypost tracks them quietly and surfaces the ones worth your time — <span class="accent">so you don't have to.</span></p>
+    <div class="stat-row reveal">
+      <div class="stat"><div class="num">3</div><div class="lbl">Live sources tracked</div></div>
+      <div class="stat"><div class="num">24/7</div><div class="lbl">Hourly scanning</div></div>
+      <div class="stat"><div class="num">0</div><div class="lbl">Manual refreshing</div></div>
+    </div>
   </div>
 
   <div class="auth-form-side">
-    <div class="auth-card">
-      <div class="brand"><span class="mark"></span>Waypost</div>
-      <h1>Find your next role</h1>
-      <p class="sub">Sign in to see matches, or create an account to start tracking.</p>
+    <div class="card-tilt-wrap" id="tilt-wrap">
+      <div class="auth-card" id="tilt-card">
+        <div class="brand"><span class="mark"></span>Waypost</div>
+        <h1>Find your next role</h1>
+        <p class="sub">Sign in to see matches, or create an account to start tracking.</p>
 
-      <div class="tabs">
-        <button class="active" id="tab-login" onclick="switchTab('login')">Log in</button>
-        <button id="tab-register" onclick="switchTab('register')">Create account</button>
+        <div class="tabs">
+          <button class="active" id="tab-login" onclick="switchTab('login')">Log in</button>
+          <button id="tab-register" onclick="switchTab('register')">Create account</button>
+        </div>
+
+        <form id="login-form" onsubmit="return handleLogin(event)">
+          <label>Email</label>
+          <input type="email" id="login-email" required placeholder="priya@email.com" />
+          <label>Password</label>
+          <input type="password" id="login-password" required placeholder="••••••••" />
+          <button class="btn-primary" type="submit" id="login-btn">Log in</button>
+          <div style="text-align:center;margin-top:16px;transform:translateZ(14px);">
+            <a href="#" onclick="switchTab('forgot');return false;" style="font-size:12.5px;color:var(--mist);">Forgot password?</a>
+          </div>
+        </form>
+
+        <form id="register-form" onsubmit="return handleRegister(event)" style="display:none;">
+          <label>Full name</label>
+          <input type="text" id="reg-name" required placeholder="Priya Sharma" />
+          <label>Email</label>
+          <input type="email" id="reg-email" required placeholder="priya@email.com" />
+          <label>Password</label>
+          <input type="password" id="reg-password" required minlength="8" placeholder="At least 8 characters" />
+          <label>Roles you want</label>
+          <input type="text" id="reg-titles" required placeholder="Software Engineer, Data Analyst" />
+          <div class="hint">Comma separated. Used to filter and rank new postings.</div>
+          <label>Preferred locations</label>
+          <input type="text" id="reg-locations" required placeholder="Bangalore, Remote" />
+          <button class="btn-primary" type="submit" id="register-btn">Create account</button>
+        </form>
+
+        <form id="forgot-form" onsubmit="return handleForgotPassword(event)" style="display:none;">
+          <p class="sub" style="margin:0 0 4px;">Enter the email on your account and we'll send a reset link.</p>
+          <label>Email</label>
+          <input type="email" id="forgot-email" required placeholder="priya@email.com" />
+          <button class="btn-primary" type="submit" id="forgot-btn">Send reset link</button>
+          <div style="text-align:center;margin-top:16px;">
+            <a href="#" onclick="switchTab('login');return false;" style="font-size:12.5px;color:var(--mist);">Back to log in</a>
+          </div>
+        </form>
+
+        <form id="reset-form" onsubmit="return handleResetPassword(event)" style="display:none;">
+          <p class="sub" style="margin:0 0 4px;">Choose a new password for your account.</p>
+          <label>New password</label>
+          <input type="password" id="reset-password" required minlength="8" placeholder="At least 8 characters" />
+          <button class="btn-primary" type="submit" id="reset-btn">Update password</button>
+        </form>
+
+        <div id="auth-msg"></div>
       </div>
-
-      <form id="login-form" onsubmit="return handleLogin(event)">
-        <label>Email</label>
-        <input type="email" id="login-email" required placeholder="priya@email.com" />
-        <label>Password</label>
-        <input type="password" id="login-password" required placeholder="••••••••" />
-        <button class="btn-primary" type="submit" id="login-btn">Log in</button>
-        <div style="text-align:center;margin-top:16px;">
-          <a href="#" onclick="switchTab('forgot');return false;" style="font-size:12.5px;color:var(--slate);">Forgot password?</a>
-        </div>
-      </form>
-
-      <form id="register-form" onsubmit="return handleRegister(event)" style="display:none;">
-        <label>Full name</label>
-        <input type="text" id="reg-name" required placeholder="Priya Sharma" />
-        <label>Email</label>
-        <input type="email" id="reg-email" required placeholder="priya@email.com" />
-        <label>Password</label>
-        <input type="password" id="reg-password" required minlength="8" placeholder="At least 8 characters" />
-        <label>Roles you want</label>
-        <input type="text" id="reg-titles" required placeholder="Software Engineer, Data Analyst" />
-        <div class="hint">Comma separated. Used to filter and rank new postings.</div>
-        <label>Preferred locations</label>
-        <input type="text" id="reg-locations" required placeholder="Bangalore, Remote" />
-        <button class="btn-primary" type="submit" id="register-btn">Create account</button>
-      </form>
-
-      <form id="forgot-form" onsubmit="return handleForgotPassword(event)" style="display:none;">
-        <p class="sub" style="margin:0 0 4px;">Enter the email on your account and we'll send a reset link.</p>
-        <label>Email</label>
-        <input type="email" id="forgot-email" required placeholder="priya@email.com" />
-        <button class="btn-primary" type="submit" id="forgot-btn">Send reset link</button>
-        <div style="text-align:center;margin-top:16px;">
-          <a href="#" onclick="switchTab('login');return false;" style="font-size:12.5px;color:var(--slate);">Back to log in</a>
-        </div>
-      </form>
-
-      <form id="reset-form" onsubmit="return handleResetPassword(event)" style="display:none;">
-        <p class="sub" style="margin:0 0 4px;">Choose a new password for your account.</p>
-        <label>New password</label>
-        <input type="password" id="reset-password" required minlength="8" placeholder="At least 8 characters" />
-        <button class="btn-primary" type="submit" id="reset-btn">Update password</button>
-      </form>
-
-      <div id="auth-msg"></div>
     </div>
   </div>
 </div>
@@ -355,14 +289,8 @@
         <div class="card">
           <h2>Alerts</h2>
           <p class="desc">Get pinged the moment a strong match appears.</p>
-          <div class="toggle-row">
-            <span>Email alerts</span>
-            <label class="switch"><input type="checkbox" id="toggle-email" onchange="updatePrefs()"><span class="slider"></span></label>
-          </div>
-          <div class="toggle-row">
-            <span>Telegram alerts</span>
-            <label class="switch"><input type="checkbox" id="toggle-telegram" onchange="updatePrefs()"><span class="slider"></span></label>
-          </div>
+          <div class="toggle-row"><span>Email alerts</span><label class="switch"><input type="checkbox" id="toggle-email" onchange="updatePrefs()"><span class="slider"></span></label></div>
+          <div class="toggle-row"><span>Telegram alerts</span><label class="switch"><input type="checkbox" id="toggle-telegram" onchange="updatePrefs()"><span class="slider"></span></label></div>
           <div id="telegram-link-box" style="margin-top:12px;">
             <input type="text" id="telegram-chat-id" placeholder="Telegram chat ID" style="margin-bottom:8px;" />
             <button class="btn-secondary" style="width:100%;" onclick="linkTelegram()">Link Telegram</button>
@@ -391,6 +319,28 @@
 const API = '';
 let token = localStorage.getItem('waypost_token') || null;
 
+/* Cinematic headline word-reveal */
+const headlineWords = ["Every", "posting", "is", "a", "point", "on", "the", "map."];
+const headlineEl = document.getElementById('headline-target');
+headlineEl.innerHTML = headlineWords.map((w,i) =>
+  `<span class="word" style="animation-delay:${0.3 + i*0.06}s">${w}&nbsp;</span>`
+).join('');
+
+/* 3D tilt on login card */
+const tiltWrap = document.getElementById('tilt-wrap');
+const tiltCard = document.getElementById('tilt-card');
+if(tiltWrap && window.matchMedia('(pointer: fine)').matches && !window.matchMedia('(prefers-reduced-motion: reduce)').matches){
+  tiltWrap.addEventListener('mousemove', (e) => {
+    const rect = tiltCard.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width - 0.5;
+    const y = (e.clientY - rect.top) / rect.height - 0.5;
+    tiltCard.style.transform = `rotateY(${x*10}deg) rotateX(${-y*10}deg) scale(1.01)`;
+  });
+  tiltWrap.addEventListener('mouseleave', () => {
+    tiltCard.style.transform = 'rotateY(0) rotateX(0) scale(1)';
+  });
+}
+
 function switchTab(tab){
   document.getElementById('tab-login').classList.toggle('active', tab==='login');
   document.getElementById('tab-register').classList.toggle('active', tab==='register');
@@ -402,10 +352,7 @@ function switchTab(tab){
   document.getElementById('auth-msg').innerHTML = '';
 }
 
-function showMsg(id, text, ok){
-  document.getElementById(id).innerHTML = `<div class="msg ${ok?'ok':'err'}">${text}</div>`;
-}
-
+function showMsg(id, text, ok){ document.getElementById(id).innerHTML = `<div class="msg ${ok?'ok':'err'}">${text}</div>`; }
 function setBtnLoading(id, loading, label){
   const btn = document.getElementById(id);
   btn.disabled = loading;
@@ -422,52 +369,42 @@ async function api(path, opts={}){
 }
 
 async function handleLogin(e){
-  e.preventDefault();
-  setBtnLoading('login-btn', true);
+  e.preventDefault(); setBtnLoading('login-btn', true);
   const fd = new FormData();
   fd.append('email', document.getElementById('login-email').value);
   fd.append('password', document.getElementById('login-password').value);
-  try{
-    const data = await api('/auth/login', {method:'POST', body: fd});
-    onAuthed(data);
-  }catch(err){ showMsg('auth-msg', err.message, false); }
+  try{ onAuthed(await api('/auth/login', {method:'POST', body: fd})); }
+  catch(err){ showMsg('auth-msg', err.message, false); }
   setBtnLoading('login-btn', false, 'Log in');
   return false;
 }
 
 async function handleRegister(e){
-  e.preventDefault();
-  setBtnLoading('register-btn', true);
+  e.preventDefault(); setBtnLoading('register-btn', true);
   const fd = new FormData();
   fd.append('name', document.getElementById('reg-name').value);
   fd.append('email', document.getElementById('reg-email').value);
   fd.append('password', document.getElementById('reg-password').value);
   fd.append('job_titles', document.getElementById('reg-titles').value);
   fd.append('locations', document.getElementById('reg-locations').value);
-  try{
-    const data = await api('/auth/register', {method:'POST', body: fd});
-    onAuthed(data);
-  }catch(err){ showMsg('auth-msg', err.message, false); }
+  try{ onAuthed(await api('/auth/register', {method:'POST', body: fd})); }
+  catch(err){ showMsg('auth-msg', err.message, false); }
   setBtnLoading('register-btn', false, 'Create account');
   return false;
 }
 
 async function handleForgotPassword(e){
-  e.preventDefault();
-  setBtnLoading('forgot-btn', true);
+  e.preventDefault(); setBtnLoading('forgot-btn', true);
   const fd = new FormData();
   fd.append('email', document.getElementById('forgot-email').value);
-  try{
-    const data = await api('/auth/forgot-password', {method:'POST', body: fd});
-    showMsg('auth-msg', data.message, true);
-  }catch(err){ showMsg('auth-msg', err.message, false); }
+  try{ const data = await api('/auth/forgot-password', {method:'POST', body: fd}); showMsg('auth-msg', data.message, true); }
+  catch(err){ showMsg('auth-msg', err.message, false); }
   setBtnLoading('forgot-btn', false, 'Send reset link');
   return false;
 }
 
 async function handleResetPassword(e){
-  e.preventDefault();
-  setBtnLoading('reset-btn', true);
+  e.preventDefault(); setBtnLoading('reset-btn', true);
   const fd = new FormData();
   fd.append('token', window._resetToken || '');
   fd.append('new_password', document.getElementById('reset-password').value);
@@ -493,8 +430,7 @@ function onAuthed(data){
 }
 
 function logout(){
-  token = null;
-  localStorage.removeItem('waypost_token');
+  token = null; localStorage.removeItem('waypost_token');
   document.getElementById('auth-screen').classList.add('visible');
   document.getElementById('dashboard').style.display = 'none';
   document.getElementById('dash-header').style.display = 'none';
@@ -518,23 +454,19 @@ async function loadMe(){
 }
 
 function renderSkills(skills){
-  const box = document.getElementById('resume-skills');
-  box.innerHTML = skills.filter(Boolean).map(s => `<span class="skill-pill">${s}</span>`).join('');
+  document.getElementById('resume-skills').innerHTML = skills.filter(Boolean).map(s => `<span class="skill-pill">${s}</span>`).join('');
 }
 
 async function handleResumeUpload(e){
   const file = e.target.files[0];
   if(!file) return;
   document.getElementById('resume-fname').textContent = 'Uploading ' + file.name + '…';
-  const fd = new FormData();
-  fd.append('file', file);
+  const fd = new FormData(); fd.append('file', file);
   try{
     const data = await api('/resume/upload', {method:'POST', body: fd});
     document.getElementById('resume-fname').textContent = file.name;
     renderSkills(data.skills_found);
-  }catch(err){
-    document.getElementById('resume-fname').textContent = 'Upload failed: ' + err.message;
-  }
+  }catch(err){ document.getElementById('resume-fname').textContent = 'Upload failed: ' + err.message; }
 }
 
 async function updatePrefs(){
@@ -547,10 +479,8 @@ async function updatePrefs(){
 async function linkTelegram(){
   const fd = new FormData();
   fd.append('telegram_chat_id', document.getElementById('telegram-chat-id').value);
-  try{
-    await api('/notifications/telegram/link', {method:'POST', body: fd});
-    document.getElementById('telegram-link-box').style.display = 'none';
-  }catch(err){ alert(err.message); }
+  try{ await api('/notifications/telegram/link', {method:'POST', body: fd}); document.getElementById('telegram-link-box').style.display = 'none'; }
+  catch(err){ alert(err.message); }
 }
 
 async function searchJobs(){
@@ -561,34 +491,23 @@ async function searchJobs(){
   box.innerHTML = '<div class="empty"><span class="spinner"></span>Searching…</div>';
   try{
     const data = await api('/jobs/search', {method:'POST', body: fd});
-    if(data.jobs.length === 0){
-      box.innerHTML = '<div class="empty">No matches yet — the agent refreshes postings hourly, check back soon.</div>';
-      return;
-    }
+    if(data.jobs.length === 0){ box.innerHTML = '<div class="empty">No matches yet — the agent refreshes postings hourly, check back soon.</div>'; return; }
     box.innerHTML = data.jobs.map(j => `
       <div class="job-card">
         <div class="row">
-          <div>
-            <h3>${j.title}</h3>
-            <p class="meta">${j.company} · ${j.location}</p>
-          </div>
+          <div><h3>${j.title}</h3><p class="meta">${j.company} · ${j.location}</p></div>
           <span class="score-badge">${j.match_score}%</span>
         </div>
         <p class="desc">${(j.description||'').slice(0,160)}${(j.description||'').length>160?'…':''}</p>
         <a href="${j.apply_url}" target="_blank" rel="noopener">View posting →</a>
-      </div>
-    `).join('');
+      </div>`).join('');
   }catch(err){ box.innerHTML = `<div class="msg err">${err.message}</div>`; }
 }
 
 const urlParams = new URLSearchParams(window.location.search);
 const resetTokenFromUrl = urlParams.get('reset_token');
-if(resetTokenFromUrl){
-  window._resetToken = resetTokenFromUrl;
-  switchTab('reset');
-}else if(token){
-  onAuthed({access_token: token, user:{name:''}});
-}
+if(resetTokenFromUrl){ window._resetToken = resetTokenFromUrl; switchTab('reset'); }
+else if(token){ onAuthed({access_token: token, user:{name:''}}); }
 </script>
 </body>
 </html>
