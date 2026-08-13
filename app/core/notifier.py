@@ -110,3 +110,25 @@ def format_match_telegram(jobs: list[dict]) -> str:
             f"<a href=\"{j['apply_url']}\">Apply here</a>"
         )
     return "\n".join(lines)
+
+
+def format_reset_email(user_name: str, reset_url: str) -> tuple[str, str]:
+    """Builds (subject, html_body) for a password reset email. The link
+    contains the raw token as a query param - the frontend reads it from
+    the URL and submits it to POST /auth/reset-password."""
+    subject = "Reset your Waypost password"
+    html = f"""
+    <div style="font-family:sans-serif;max-width:480px;">
+      <p>Hi {user_name},</p>
+      <p>We got a request to reset your Waypost password. Click below to
+      choose a new one - this link expires in 30 minutes.</p>
+      <p style="margin:24px 0;">
+        <a href="{reset_url}" style="background:#33513F;color:#fff;padding:12px 22px;
+        border-radius:8px;text-decoration:none;font-weight:600;">Reset password</a>
+      </p>
+      <p style="color:#999;font-size:12px;">
+        If you didn't request this, you can safely ignore this email - your
+        password won't change unless you click the link above and set a new one.
+      </p>
+    </div>"""
+    return subject, html
