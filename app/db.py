@@ -71,6 +71,8 @@ class UserProfile(Base):
     match_score_threshold = Column(Float, default=40.0)  # min match_score to trigger a notification
     reset_token_hash = Column(String, nullable=True)  # sha256 of the raw token emailed to the user, never store the raw token
     reset_token_expires = Column(DateTime, nullable=True)
+    security_question = Column(String, nullable=True)
+    security_answer_hash = Column(String, nullable=True)  # bcrypt hash, same treatment as the password itself
     created_at = Column(DateTime, default=dt.datetime.utcnow)
 
 
