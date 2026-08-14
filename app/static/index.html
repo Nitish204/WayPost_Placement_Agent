@@ -240,6 +240,11 @@
           <input type="email" id="reg-email" required placeholder="priya@email.com" />
           <label>Password</label>
           <input type="password" id="reg-password" required minlength="8" placeholder="At least 8 characters" />
+          <label>Security question</label>
+          <input type="text" id="reg-security-question" required placeholder="What was your first pet's name?" />
+          <div class="hint">Used to recover your account if you forget your password — no email needed.</div>
+          <label>Answer</label>
+          <input type="text" id="reg-security-answer" required minlength="2" placeholder="Your answer" />
           <label>Roles you want</label>
           <input type="text" id="reg-titles" required placeholder="Software Engineer, Data Analyst" />
           <div class="hint">Comma separated. Used to filter and rank new postings.</div>
@@ -248,18 +253,20 @@
           <button class="btn-primary" type="submit" id="register-btn">Create account</button>
         </form>
 
-        <form id="forgot-form" onsubmit="return handleForgotPassword(event)" style="display:none;">
-          <p class="sub" style="margin:0 0 4px;">Enter the email on your account and we'll send a reset link.</p>
+        <form id="forgot-form" onsubmit="return handleFetchSecurityQuestion(event)" style="display:none;">
+          <p class="sub" style="margin:0 0 4px;">Enter your account email to see your security question.</p>
           <label>Email</label>
           <input type="email" id="forgot-email" required placeholder="priya@email.com" />
-          <button class="btn-primary" type="submit" id="forgot-btn">Send reset link</button>
+          <button class="btn-primary" type="submit" id="forgot-btn">Continue</button>
           <div style="text-align:center;margin-top:16px;">
             <a href="#" onclick="switchTab('login');return false;" style="font-size:12.5px;color:var(--mist);">Back to log in</a>
           </div>
         </form>
 
-        <form id="reset-form" onsubmit="return handleResetPassword(event)" style="display:none;">
-          <p class="sub" style="margin:0 0 4px;">Choose a new password for your account.</p>
+        <form id="reset-form" onsubmit="return handleResetWithAnswer(event)" style="display:none;">
+          <p class="sub" style="margin:0 0 4px;" id="reset-question-display"></p>
+          <label>Your answer</label>
+          <input type="text" id="reset-security-answer" required placeholder="Your answer" />
           <label>New password</label>
           <input type="password" id="reset-password" required minlength="8" placeholder="At least 8 characters" />
           <button class="btn-primary" type="submit" id="reset-btn">Update password</button>
@@ -288,8 +295,7 @@
 
         <div class="card">
           <h2>Alerts</h2>
-          <p class="desc">Get pinged the moment a strong match appears.</p>
-          <div class="toggle-row"><span>Email alerts</span><label class="switch"><input type="checkbox" id="toggle-email" onchange="updatePrefs()"><span class="slider"></span></label></div>
+          <p class="desc">Get pinged on Telegram the moment a strong match appears.</p>
           <div class="toggle-row"><span>Telegram alerts</span><label class="switch"><input type="checkbox" id="toggle-telegram" onchange="updatePrefs()"><span class="slider"></span></label></div>
           <div id="telegram-link-box" style="margin-top:12px;">
             <input type="text" id="telegram-chat-id" placeholder="Telegram chat ID" style="margin-bottom:8px;" />
@@ -385,6 +391,8 @@ async function handleRegister(e){
   fd.append('name', document.getElementById('reg-name').value);
   fd.append('email', document.getElementById('reg-email').value);
   fd.append('password', document.getElementById('reg-password').value);
+  fd.append('security_question', document.getElementById('reg-security-question').value);
+  fd.append('security_answer', document.getElementById('reg-security-answer').value);
   fd.append('job_titles', document.getElementById('reg-titles').value);
   fd.append('locations', document.getElementById('reg-locations').value);
   try{ onAuthed(await api('/auth/register', {method:'POST', body: fd})); }
@@ -393,25 +401,30 @@ async function handleRegister(e){
   return false;
 }
 
-async function handleForgotPassword(e){
+async function handleFetchSecurityQuestion(e){
   e.preventDefault(); setBtnLoading('forgot-btn', true);
+  const email = document.getElementById('forgot-email').value;
   const fd = new FormData();
-  fd.append('email', document.getElementById('forgot-email').value);
-  try{ const data = await api('/auth/forgot-password', {method:'POST', body: fd}); showMsg('auth-msg', data.message, true); }
-  catch(err){ showMsg('auth-msg', err.message, false); }
-  setBtnLoading('forgot-btn', false, 'Send reset link');
+  fd.append('email', email);
+  try{
+    const data = await api('/auth/security-question', {method:'POST', body: fd});
+    window._resetEmail = email;
+    document.getElementById('reset-question-display').textContent = data.security_question;
+    switchTab('reset');
+  }catch(err){ showMsg('auth-msg', err.message, false); }
+  setBtnLoading('forgot-btn', false, 'Continue');
   return false;
 }
 
-async function handleResetPassword(e){
+async function handleResetWithAnswer(e){
   e.preventDefault(); setBtnLoading('reset-btn', true);
   const fd = new FormData();
-  fd.append('token', window._resetToken || '');
+  fd.append('email', window._resetEmail || '');
+  fd.append('security_answer', document.getElementById('reset-security-answer').value);
   fd.append('new_password', document.getElementById('reset-password').value);
   try{
-    const data = await api('/auth/reset-password', {method:'POST', body: fd});
+    const data = await api('/auth/reset-with-security-answer', {method:'POST', body: fd});
     showMsg('auth-msg', data.message + ' Redirecting to log in…', true);
-    history.replaceState(null, '', window.location.pathname);
     setTimeout(() => switchTab('login'), 1500);
   }catch(err){ showMsg('auth-msg', err.message, false); }
   setBtnLoading('reset-btn', false, 'Update password');
@@ -443,7 +456,6 @@ async function loadMe(){
     document.getElementById('userbar-name').textContent = me.name;
     document.getElementById('search-titles').value = me.job_titles || '';
     document.getElementById('search-locations').value = me.locations || '';
-    document.getElementById('toggle-email').checked = me.notify_email;
     document.getElementById('toggle-telegram').checked = me.notify_telegram;
     document.getElementById('telegram-link-box').style.display = me.telegram_linked ? 'none' : 'block';
     if(me.has_resume){
@@ -471,7 +483,6 @@ async function handleResumeUpload(e){
 
 async function updatePrefs(){
   const fd = new FormData();
-  fd.append('notify_email', document.getElementById('toggle-email').checked);
   fd.append('notify_telegram', document.getElementById('toggle-telegram').checked);
   try{ await api('/profile/update', {method:'POST', body: fd}); }catch(err){}
 }
@@ -504,10 +515,7 @@ async function searchJobs(){
   }catch(err){ box.innerHTML = `<div class="msg err">${err.message}</div>`; }
 }
 
-const urlParams = new URLSearchParams(window.location.search);
-const resetTokenFromUrl = urlParams.get('reset_token');
-if(resetTokenFromUrl){ window._resetToken = resetTokenFromUrl; switchTab('reset'); }
-else if(token){ onAuthed({access_token: token, user:{name:''}}); }
+if(token){ onAuthed({access_token: token, user:{name:''}}); }
 </script>
 </body>
 </html>
