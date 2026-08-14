@@ -24,11 +24,10 @@ from app.db import init_db, get_session, Job, UserProfile
 from app.core.resume_parser import parse_resume
 from app.core.ats_scorer import compute_ats_score
 from app.core.matcher import find_matches
-from app.core.notifier import send_email, format_reset_email
 from app.core.ingest import run_ingestion_cycle, seed_sample_jobs
 from app.core.auth import (
     hash_password, verify_password, create_access_token, get_current_user,
-    generate_reset_token, verify_reset_token,
+    hash_security_answer, verify_security_answer,
 )
 from app.agent import run_agent
 from app.scheduler import start_scheduler, stop_scheduler
@@ -68,6 +67,8 @@ def register(
     name: str = Form(...),
     email: str = Form(...),
     password: str = Form(..., min_length=8),
+    security_question: str = Form(..., description="e.g. 'What was your first pet's name?'"),
+    security_answer: str = Form(..., min_length=2),
     job_titles: str = Form(..., description="Comma separated, e.g. 'Software Engineer,Data Analyst'"),
     locations: str = Form(..., description="Comma separated, e.g. 'Bangalore,Remote'"),
     experience_level: str = Form("fresher"),
@@ -79,6 +80,7 @@ def register(
 
     profile = UserProfile(
         name=name, email=email, hashed_password=hash_password(password),
+        security_question=security_question, security_answer_hash=hash_security_answer(security_answer),
         job_titles=job_titles, locations=locations, experience_level=experience_level,
     )
     db.add(profile)
@@ -124,55 +126,37 @@ def me(current_user: UserProfile = Depends(get_current_user)):
     }
 
 
-@app.post("/auth/forgot-password")
-def forgot_password(
+@app.post("/auth/security-question")
+def get_security_question(
     email: str = Form(...),
     db: Session = Depends(get_session),
 ):
-    """Always returns the same generic message regardless of whether the
-    email exists - this prevents using this endpoint to check which
-    emails are registered (a common enumeration attack)."""
-    generic_response = {"message": "If an account with that email exists, a reset link has been sent."}
-
+    """First step of on-site password recovery: returns the account's
+    security question so the frontend can display it. This does leak
+    whether an email is registered (unlike the old email-based flow,
+    which could stay silent) - an accepted tradeoff for going
+    email-free, since the alternative (always returning some question)
+    would let anyone probe for the real one anyway once they submit
+    a wrong answer. Rate limiting this endpoint at the infra level is
+    recommended if abuse becomes a concern."""
     user = db.query(UserProfile).filter(UserProfile.email == email).first()
-    if not user:
-        return generic_response
-
-    raw_token, token_hash, expires = generate_reset_token()
-    user.reset_token_hash = token_hash
-    user.reset_token_expires = expires
-    db.commit()
-
-    frontend_base = os.getenv("FRONTEND_BASE_URL", "").rstrip("/")
-    reset_url = f"{frontend_base}/?reset_token={raw_token}" if frontend_base else f"?reset_token={raw_token}"
-
-    subject, html = format_reset_email(user.name or "there", reset_url)
-    sent, detail = send_email(user.email, subject, html)
-    if not sent:
-        logger.warning(f"[auth] reset email failed to send for user_id={user.id}: {detail}")
-
-    return generic_response
+    if not user or not user.security_question:
+        raise HTTPException(404, "No account found with that email, or no security question was set for it.")
+    return {"security_question": user.security_question}
 
 
-@app.post("/auth/reset-password")
-def reset_password(
-    token: str = Form(...),
+@app.post("/auth/reset-with-security-answer")
+def reset_with_security_answer(
+    email: str = Form(...),
+    security_answer: str = Form(...),
     new_password: str = Form(..., min_length=8),
     db: Session = Depends(get_session),
 ):
-    user = db.query(UserProfile).filter(UserProfile.reset_token_hash.isnot(None)).all()
-    matched_user = None
-    for candidate in user:
-        if verify_reset_token(token, candidate.reset_token_hash, candidate.reset_token_expires):
-            matched_user = candidate
-            break
+    user = db.query(UserProfile).filter(UserProfile.email == email).first()
+    if not user or not verify_security_answer(security_answer, user.security_answer_hash):
+        raise HTTPException(400, "That answer doesn't match our records. Please try again.")
 
-    if not matched_user:
-        raise HTTPException(400, "This reset link is invalid or has expired. Request a new one.")
-
-    matched_user.hashed_password = hash_password(new_password)
-    matched_user.reset_token_hash = None
-    matched_user.reset_token_expires = None
+    user.hashed_password = hash_password(new_password)
     db.commit()
 
     return {"message": "Password updated. You can now log in with your new password."}
@@ -307,31 +291,6 @@ def seed_sample(
     after setup, before configuring real GREENHOUSE_BOARDS/LEVER_BOARDS/
     ADZUNA keys - no external calls, no API keys required."""
     return seed_sample_jobs(db)
-
-
-@app.post("/debug/test-email")
-def debug_test_email(
-    current_user: UserProfile = Depends(get_current_user),
-):
-    """TEMPORARY diagnostic endpoint - remove before considering this
-    production-ready. Sends a real test email to the logged-in user's
-    own address and returns Resend's ACTUAL response/error instead of
-    the deliberately generic message /auth/forgot-password gives, so
-    the exact failure reason (missing key, unverified recipient, bad
-    domain, etc) is visible in one request instead of digging through
-    server logs."""
-    sent, detail = send_email(
-        current_user.email,
-        "Waypost test email",
-        f"<p>Hi {current_user.name or 'there'},</p><p>If you're reading this, Resend is configured correctly.</p>",
-    )
-    return {
-        "sent": sent,
-        "detail": detail,
-        "sent_to": current_user.email,
-        "resend_from_configured": os.getenv("RESEND_FROM", "onboarding@resend.dev"),
-        "resend_api_key_present": bool(os.getenv("RESEND_API_KEY")),
-    }
 
 
 @app.get("/health")
