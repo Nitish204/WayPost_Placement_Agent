@@ -101,3 +101,30 @@ def verify_reset_token(raw_token: str, stored_hash: str, expires_at: dt.datetime
         return False
     incoming_hash = hashlib.sha256(raw_token.encode()).hexdigest()
     return secrets.compare_digest(incoming_hash, stored_hash)
+
+
+# ---------------------------------------------------------------------
+# Security-question password recovery
+# ---------------------------------------------------------------------
+# Chosen over email-based reset because Resend's free tier can only
+# deliver to the account owner's own address without a verified domain
+# (see notifier.py) - this keeps password recovery fully self-contained
+# on the site itself, no outbound email dependency at all. The answer
+# is hashed with the same bcrypt scheme as the password (never stored
+# in plaintext), and normalized (trimmed + lowercased) before hashing
+# and before verification so "Blue" and "blue " are treated as the same
+# answer - reduces false negatives from a user's own capitalization/
+# whitespace inconsistency between setting and answering it.
+
+def normalize_security_answer(answer: str) -> str:
+    return answer.strip().lower()
+
+
+def hash_security_answer(answer: str) -> str:
+    return hash_password(normalize_security_answer(answer))
+
+
+def verify_security_answer(answer: str, stored_hash: str) -> bool:
+    if not stored_hash:
+        return False
+    return verify_password(normalize_security_answer(answer), stored_hash)
