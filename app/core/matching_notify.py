@@ -2,22 +2,27 @@
 Bridges matching + notifications: after every ingestion cycle, this
 scores each user's profile against the current active job pool, records
 new scores in MatchResult (dedup key: user_id + job_id), and sends a
-single batched email/Telegram message per user for any match that:
+single batched Telegram message per user for any match that:
   1. is new (no MatchResult row yet), AND
   2. scores at or above that user's match_score_threshold, AND
   3. hasn't already been notified (MatchResult.notified == False)
 
 This turns the previously pull-only matcher into a push notifier
 without duplicating the ranking logic in matcher.py.
+
+Telegram-only by design: email delivery required either Resend's
+onboarding domain (which can only send to the account owner's own
+address without a verified domain - see notifier.py) or SMTP (blocked
+on Render's free tier). Rather than ship a notification channel that
+silently fails for every user except the account owner, job-match
+alerts go out over Telegram only, which has no such restriction.
 """
 import logging
 from sqlalchemy.orm import Session
 
 from app.db import Job, UserProfile, MatchResult
 from app.core.matcher import find_matches
-from app.core.notifier import (
-    send_email, send_telegram, format_match_email, format_match_telegram,
-)
+from app.core.notifier import send_telegram, format_match_telegram
 
 logger = logging.getLogger(__name__)
 
@@ -67,10 +72,6 @@ def notify_new_matches_for_all_users(db: Session) -> dict:
             continue
 
         sent_any = False
-        if user.notify_email and user.email:
-            subject, html = format_match_email(user.name or "there", new_matches)
-            email_sent, _ = send_email(user.email, subject, html)
-            sent_any = email_sent or sent_any
         if user.notify_telegram and user.telegram_chat_id:
             text = format_match_telegram(new_matches)
             sent_any = send_telegram(user.telegram_chat_id, text) or sent_any
