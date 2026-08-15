@@ -101,8 +101,8 @@ box-shadow:0 12px 32px rgba(98,87,232,.22);transition:.35s}
 .spinner{width:14px;height:14px;border:2px solid rgba(255,255,255,.25);border-top-color:white;border-radius:50%;display:inline-block;animation:spin .7s linear infinite;vertical-align:-3px;margin-right:7px}
 @keyframes spin{to{transform:rotate(360deg)}}
 
-#dashboard{position:relative;z-index:5;padding:35px 0 90px;opacity:0;animation:dashboardIn .65s ease forwards}
-@keyframes dashboardIn{to{opacity:1}}
+#dashboard{position:relative;z-index:5;padding:35px 0 90px}
+#dashboard.page-reveal{opacity:0;transform:translateY(16px)}
 .grid{display:grid;grid-template-columns:340px 1fr;gap:22px;align-items:start}
 .card{background:rgba(255,255,255,.82);border:1px solid var(--line);border-radius:20px;padding:24px;margin-bottom:18px;backdrop-filter:blur(18px);box-shadow:0 20px 50px rgba(54,46,100,.08);transition:.25s}
 .card:hover{border-color:rgba(98,87,232,.28);transform:translateY(-2px)}
@@ -267,6 +267,7 @@ body.authed #auth-screen{display:none !important}
 </style>
 </head>
 <body>
+<noscript><style>.page-reveal{opacity:1 !important;transform:none !important}.intro-screen{display:none !important}</style></noscript>
 <div class="intro-screen" id="intro-screen">
   <div class="intro-grid"></div>
   <div class="intro-glow"></div>
@@ -361,7 +362,7 @@ body.authed #auth-screen{display:none !important}
  </section>
 </div>
 
-<div id="dashboard">
+<div id="dashboard" class="page-reveal">
  <div class="wrap">
   <div class="grid">
    <div>
@@ -506,6 +507,7 @@ async function onAuthed(data){
 
 function revealDashboard(me){
   document.body.classList.add('authed');
+  document.getElementById('dashboard').classList.add('ready');
   document.getElementById('userbar-name').textContent = me.name;
   document.getElementById('search-titles').value = me.job_titles || '';
   document.getElementById('search-locations').value = me.locations || '';
@@ -609,13 +611,20 @@ if(token){
 (function(){
   const intro = document.getElementById('intro-screen');
   const auth = document.getElementById('auth-screen');
+  let revealed = false;
   const finish = () => {
-    if(!intro) return;
-    intro.classList.add('done');
+    if(revealed) return; revealed = true;
+    if(intro){ intro.classList.add('done'); setTimeout(()=>intro.remove(),1000); }
     if(auth) auth.classList.add('ready');
-    setTimeout(()=>intro.remove(),1000);
   };
-  window.addEventListener('load',()=>setTimeout(finish,1850),{once:true});
+  // Primary path: a short cinematic pause after the page has fully loaded.
+  if(document.readyState === 'complete'){ setTimeout(finish, 900); }
+  else{ window.addEventListener('load', () => setTimeout(finish, 1400), {once:true}); }
+  // Hard safety net: guarantees the page is never left blank, even if
+  // the load event never fires or fires before this listener attaches.
+  setTimeout(finish, 3200);
+})();
+</script>
 
   // Gentle magnetic CTA response.
   document.addEventListener('pointermove',e=>{
