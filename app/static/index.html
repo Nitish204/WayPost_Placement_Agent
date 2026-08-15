@@ -101,7 +101,7 @@ box-shadow:0 12px 32px rgba(98,87,232,.22);transition:.35s}
 .spinner{width:14px;height:14px;border:2px solid rgba(255,255,255,.25);border-top-color:white;border-radius:50%;display:inline-block;animation:spin .7s linear infinite;vertical-align:-3px;margin-right:7px}
 @keyframes spin{to{transform:rotate(360deg)}}
 
-#dashboard{position:relative;z-index:5;display:none;padding:35px 0 90px;opacity:0;animation:dashboardIn .65s ease forwards}
+#dashboard{position:relative;z-index:5;padding:35px 0 90px;opacity:0;animation:dashboardIn .65s ease forwards}
 @keyframes dashboardIn{to{opacity:1}}
 .grid{display:grid;grid-template-columns:340px 1fr;gap:22px;align-items:start}
 .card{background:rgba(255,255,255,.82);border:1px solid var(--line);border-radius:20px;padding:24px;margin-bottom:18px;backdrop-filter:blur(18px);box-shadow:0 20px 50px rgba(54,46,100,.08);transition:.25s}
@@ -139,6 +139,26 @@ box-shadow:0 12px 32px rgba(98,87,232,.22);transition:.35s}
 #userbar{display:none;align-items:center;gap:14px;font-size:12px;color:#706c7d}
 #userbar button{background:transparent;border:1px solid var(--line);border-radius:9px;color:#393645;padding:7px 12px;font-size:11px}
 #dash-header{display:none;position:relative;z-index:10;border-bottom:1px solid rgba(28,25,50,.07);padding:18px 0}
+
+/*
+  ==== VISIBILITY GATE (bug fix) ====
+  Root problem: dashboard visibility was previously toggled only via
+  inline style.display from JS, which could momentarily reveal the
+  dashboard for anyone with a stale/expired token still sitting in
+  localStorage - the UI would show it optimistically before the async
+  /auth/me check had a chance to reject it and hide it again. That's a
+  real gap: it means dashboard content could flash for someone who
+  isn't actually authenticated by the server's standard.
+
+  Fix: gate BOTH screens off a single source of truth - a `authed`
+  class on <body> that is only ever added AFTER the server has
+  confirmed the token via /auth/me. These two rules are !important so
+  no inline style set by other JS can accidentally leave both screens
+  visible (or both hidden) at once, regardless of load order.
+*/
+body:not(.authed) #dashboard{display:none !important}
+body.authed #auth-screen{display:none !important}
+#dashboard{display:none}
 
 @media(max-width:900px){
  #auth-screen{grid-template-columns:1fr;gap:15px;padding-top:20px}
@@ -406,7 +426,7 @@ async function handleLogin(e){
   const fd = new FormData();
   fd.append('email', document.getElementById('login-email').value);
   fd.append('password', document.getElementById('login-password').value);
-  try{ onAuthed(await api('/auth/login', {method:'POST', body: fd})); }
+  try{ await onAuthed(await api('/auth/login', {method:'POST', body: fd})); }
   catch(err){ showMsg('auth-msg', err.message, false); }
   setBtnLoading('login-btn', false, 'Log in');
   return false;
@@ -422,7 +442,7 @@ async function handleRegister(e){
   fd.append('security_answer', document.getElementById('reg-security-answer').value);
   fd.append('job_titles', document.getElementById('reg-titles').value);
   fd.append('locations', document.getElementById('reg-locations').value);
-  try{ onAuthed(await api('/auth/register', {method:'POST', body: fd})); }
+  try{ await onAuthed(await api('/auth/register', {method:'POST', body: fd})); }
   catch(err){ showMsg('auth-msg', err.message, false); }
   setBtnLoading('register-btn', false, 'Create account');
   return false;
@@ -458,42 +478,48 @@ async function handleResetWithAnswer(e){
   return false;
 }
 
-function onAuthed(data){
+/*
+  onAuthed no longer just "trusts" the token it was just handed - even
+  right after a fresh login/register, it re-confirms via /auth/me
+  before ever revealing the dashboard. This keeps ONE code path
+  (revealDashboard) as the single place that's allowed to show
+  authenticated content, whether we got here via a fresh login or via
+  a saved token on page load - no shortcuts, no optimistic reveals.
+*/
+async function onAuthed(data){
   token = data.access_token;
   localStorage.setItem('waypost_token', token);
   const authScreen = document.getElementById('auth-screen');
   authScreen.classList.add('leaving');
-  setTimeout(() => {
-    authScreen.classList.remove('visible', 'leaving');
-    document.getElementById('dashboard').style.display = 'block';
-    document.getElementById('dash-header').style.display = 'block';
-    document.getElementById('userbar').style.display = 'flex';
-    document.getElementById('userbar-name').textContent = data.user.name;
-    loadMe();
-  }, 420);
+  try{
+    const me = await api('/auth/me');
+    setTimeout(() => {
+      authScreen.classList.remove('leaving');
+      revealDashboard(me);
+    }, 420);
+  }catch(err){
+    authScreen.classList.remove('leaving');
+    logout();
+    throw err;
+  }
+}
+
+function revealDashboard(me){
+  document.body.classList.add('authed');
+  document.getElementById('userbar-name').textContent = me.name;
+  document.getElementById('search-titles').value = me.job_titles || '';
+  document.getElementById('search-locations').value = me.locations || '';
+  document.getElementById('toggle-telegram').checked = me.notify_telegram;
+  document.getElementById('telegram-link-box').style.display = me.telegram_linked ? 'none' : 'block';
+  if(me.has_resume){
+    document.getElementById('resume-fname').textContent = 'Resume on file';
+    renderSkills(me.resume_skills);
+  }
 }
 
 function logout(){
   token = null; localStorage.removeItem('waypost_token');
-  document.getElementById('auth-screen').classList.add('visible');
-  document.getElementById('dashboard').style.display = 'none';
-  document.getElementById('dash-header').style.display = 'none';
-  document.getElementById('userbar').style.display = 'none';
-}
-
-async function loadMe(){
-  try{
-    const me = await api('/auth/me');
-    document.getElementById('userbar-name').textContent = me.name;
-    document.getElementById('search-titles').value = me.job_titles || '';
-    document.getElementById('search-locations').value = me.locations || '';
-    document.getElementById('toggle-telegram').checked = me.notify_telegram;
-    document.getElementById('telegram-link-box').style.display = me.telegram_linked ? 'none' : 'block';
-    if(me.has_resume){
-      document.getElementById('resume-fname').textContent = 'Resume on file';
-      renderSkills(me.resume_skills);
-    }
-  }catch(err){ logout(); }
+  document.body.classList.remove('authed');
 }
 
 function renderSkills(skills){
@@ -546,7 +572,17 @@ async function searchJobs(){
   }catch(err){ box.innerHTML = `<div class="msg err">${err.message}</div>`; }
 }
 
-if(token){ onAuthed({access_token: token, user:{name:''}}); }
+/*
+  Bootstrap: a token merely EXISTING in localStorage is never enough to
+  show the dashboard - it could be expired, revoked, or edited by hand
+  in devtools. We always re-verify with the server first via
+  onAuthed(), which itself calls /auth/me before revealing anything.
+  If verification fails, logout() runs and the user simply sees the
+  (already-hidden-by-default) auth screen - no flash, no leak.
+*/
+if(token){
+  onAuthed({access_token: token, user:{name:''}}).catch(()=>{});
+}
 </script>
 <script>
 (function(){
