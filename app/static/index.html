@@ -509,7 +509,6 @@ async function onAuthed(data){
 function revealDashboard(me){
   document.body.classList.add('authed');
   document.getElementById('dashboard').classList.add('ready');
-  document.getElementById('dash-header').style.display = 'block';
   document.getElementById('userbar').style.display = 'flex';
   document.getElementById('userbar-name').textContent = me.name;
   document.getElementById('search-titles').value = me.job_titles || '';
@@ -525,7 +524,6 @@ function revealDashboard(me){
 function logout(){
   token = null; localStorage.removeItem('waypost_token');
   document.body.classList.remove('authed');
-  document.getElementById('dash-header').style.display = 'none';
   document.getElementById('userbar').style.display = 'none';
 }
 
