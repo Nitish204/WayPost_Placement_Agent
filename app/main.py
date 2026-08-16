@@ -12,11 +12,15 @@ Endpoints:
 import os
 import secrets
 import logging
-from fastapi import FastAPI, UploadFile, File, Form, Depends, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, Depends, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from dotenv import load_dotenv
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 
 load_dotenv()
 
@@ -37,12 +41,54 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Placement Finder Agent", version="0.2.0")
 
+# ---------------------------------------------------------------------
+# Rate limiting - keyed by client IP. Applied per-endpoint below (see
+# @limiter.limit(...) decorators on auth routes) since those are the
+# realistic brute-force targets (login guessing, security-answer
+# guessing, account enumeration via forgot-password, spam registration)
+# - not blanket-applied to every endpoint, since job search/resume
+# upload etc. don't carry the same abuse risk and blanket limits just
+# degrade normal usage without adding real protection there.
+# ---------------------------------------------------------------------
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
+
+# ---------------------------------------------------------------------
+# CORS - defaults to permissive for local dev, but reads
+# ALLOWED_ORIGINS from the environment so a production deploy can (and
+# should) lock this to its real domain instead of allowing any site to
+# call this API from a browser. Comma-separated, e.g.:
+#   ALLOWED_ORIGINS=https://waypost-placement-agent.onrender.com
+# ---------------------------------------------------------------------
+_allowed_origins_env = os.getenv("ALLOWED_ORIGINS", "").strip()
+allowed_origins = [o.strip() for o in _allowed_origins_env.split(",") if o.strip()] or ["*"]
+if allowed_origins == ["*"]:
+    logger.warning(
+        "[security] ALLOWED_ORIGINS not set - CORS is wide open (allow_origins=['*']). "
+        "Set ALLOWED_ORIGINS to your real deployed URL before treating this as production."
+    )
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    """Baseline security headers on every response. None of these are
+    exotic - they're the standard low-cost hardening any API should
+    ship with, closing off classes of attack (clickjacking, MIME
+    sniffing, referrer leakage) that cost nothing to prevent."""
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
 
 
 @app.on_event("startup")
@@ -63,7 +109,9 @@ def on_shutdown():
 # ---------------------------------------------------------------------
 
 @app.post("/auth/register")
+@limiter.limit("5/minute")
 def register(
+    request: Request,
     name: str = Form(...),
     email: str = Form(...),
     password: str = Form(..., min_length=8),
@@ -95,7 +143,9 @@ def register(
 
 
 @app.post("/auth/login")
+@limiter.limit("10/minute")
 def login(
+    request: Request,
     email: str = Form(...),
     password: str = Form(...),
     db: Session = Depends(get_session),
@@ -127,7 +177,9 @@ def me(current_user: UserProfile = Depends(get_current_user)):
 
 
 @app.post("/auth/security-question")
+@limiter.limit("5/minute")
 def get_security_question(
+    request: Request,
     email: str = Form(...),
     db: Session = Depends(get_session),
 ):
@@ -137,8 +189,7 @@ def get_security_question(
     which could stay silent) - an accepted tradeoff for going
     email-free, since the alternative (always returning some question)
     would let anyone probe for the real one anyway once they submit
-    a wrong answer. Rate limiting this endpoint at the infra level is
-    recommended if abuse becomes a concern."""
+    a wrong answer. Rate limited to slow down enumeration attempts."""
     user = db.query(UserProfile).filter(UserProfile.email == email).first()
     if not user or not user.security_question:
         raise HTTPException(404, "No account found with that email, or no security question was set for it.")
@@ -146,12 +197,18 @@ def get_security_question(
 
 
 @app.post("/auth/reset-with-security-answer")
+@limiter.limit("5/minute")
 def reset_with_security_answer(
+    request: Request,
     email: str = Form(...),
     security_answer: str = Form(...),
     new_password: str = Form(..., min_length=8),
     db: Session = Depends(get_session),
 ):
+    """Tightly rate limited on purpose: this is the actual
+    account-takeover path if a security answer is guessable, so it
+    gets the strictest limit of any auth endpoint - 5 attempts/minute
+    per IP makes brute-forcing a short/common answer impractical."""
     user = db.query(UserProfile).filter(UserProfile.email == email).first()
     if not user or not verify_security_answer(security_answer, user.security_answer_hash):
         raise HTTPException(400, "That answer doesn't match our records. Please try again.")
