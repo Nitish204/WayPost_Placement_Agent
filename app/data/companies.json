@@ -14,6 +14,11 @@
     "early_career_friendly": ["shopify"]
   },
 
+  "ashby": {
+    "software_general": ["linear", "vercel", "ramp", "retool", "mercury", "replit"]
+  },
+
   "default_fallback_greenhouse": ["stripe", "airbnb", "figma", "notion", "doordash"],
-  "default_fallback_lever": ["netflix", "palantir"]
+  "default_fallback_lever": ["netflix", "palantir"],
+  "default_fallback_ashby": ["linear", "vercel", "ramp"]
 }
