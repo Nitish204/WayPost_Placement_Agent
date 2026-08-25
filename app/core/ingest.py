@@ -13,7 +13,7 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from app.db import Job, make_job_hash
-from app.sources import greenhouse, lever, adzuna
+from app.sources import greenhouse, lever, adzuna, ashby
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +31,7 @@ def _fallback_boards() -> dict:
         return {
             "greenhouse": data.get("default_fallback_greenhouse", []),
             "lever": data.get("default_fallback_lever", []),
+            "ashby": data.get("default_fallback_ashby", []),
         }
     except Exception as e:
         logger.warning(f"[ingest] couldn't load fallback companies.json: {e}")
@@ -59,6 +60,14 @@ def fetch_all_raw_jobs(search_query: str = "", search_location: str = "") -> lis
             logger.info(f"[ingest] LEVER_BOARDS not set, using fallback list: {lever_boards}")
     if lever_boards:
         all_jobs.extend(lever.fetch_multiple(lever_boards))
+
+    ashby_boards = [b for b in os.getenv("ASHBY_BOARDS", "").split(",") if b.strip()]
+    if not ashby_boards:
+        ashby_boards = fallback["ashby"]
+        if ashby_boards:
+            logger.info(f"[ingest] ASHBY_BOARDS not set, using fallback list: {ashby_boards}")
+    if ashby_boards:
+        all_jobs.extend(ashby.fetch_multiple(ashby_boards))
 
     if search_query:
         all_jobs.extend(adzuna.fetch_jobs(query=search_query, location=search_location))
