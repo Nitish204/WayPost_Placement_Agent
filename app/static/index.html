@@ -3,315 +3,222 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Waypost — find the role that's actually yours</title>
+<title>Waypost — the job board that reads job boards for you</title>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Instrument+Serif:ital@1&family=Manrope:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,500&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
 
 :root{
-  --bg:#f8f9ff; --bg2:#ffffff; --surface:rgba(255,255,255,.72);
-  --surface-strong:rgba(255,255,255,.92); --text:#171625;
-  --muted:#646278; --faint:#9491a5; --line:rgba(28,25,50,.10);
-  --violet:#6257e8; --pink:#e45b9d; --cyan:#17a9cf; --green:#3fae7b;
-  --danger:#ff8b8b;
+  --ink:#15140f; --paper:#faf8f2; --paper2:#f1eee3; --line:rgba(21,20,15,.14);
+  --line-strong:rgba(21,20,15,.32); --muted:#6d6b5e; --faint:#a3a191;
+  --signal:#2f5d4c; --signal-bg:#e2ede6; --signal-line:#bcd3c6;
+  --warn:#8a5a1f; --warn-bg:#f5ecd8; --danger:#96302f; --danger-bg:#f7e5e3;
 }
 *{box-sizing:border-box}
 html{scroll-behavior:smooth}
-body{margin:0;min-height:100vh;background:var(--bg);color:var(--text);
-font-family:'DM Sans',sans-serif;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+body{margin:0;min-height:100vh;background:var(--paper);color:var(--ink);
+font-family:'Inter',sans-serif;-webkit-font-smoothing:antialiased}
 button,input{font:inherit}
 button{cursor:pointer}
-.mesh{position:fixed;inset:0;overflow:hidden;background:
-radial-gradient(circle at 50% -10%,rgba(98,87,232,.16),transparent 34%),
-radial-gradient(circle at 85% 55%,rgba(228,91,157,.10),transparent 30%),
-linear-gradient(180deg,#ffffff 0%,#f6f7fc 100%);z-index:0}
-.orb{position:absolute;border-radius:50%;filter:blur(90px);mix-blend-mode:multiply;opacity:.48;will-change:transform}
-.orb.a{width:42vw;height:42vw;left:-15vw;top:-18vw;background:radial-gradient(circle,rgba(98,87,232,.30),transparent 68%);animation:orbA 22s ease-in-out infinite}
-.orb.b{width:34vw;height:34vw;right:-9vw;top:12vh;background:radial-gradient(circle,rgba(228,91,157,.22),transparent 70%);animation:orbB 27s ease-in-out infinite}
-.orb.c{width:30vw;height:30vw;left:20vw;bottom:-18vw;background:radial-gradient(circle,rgba(23,169,207,.20),transparent 70%);animation:orbC 24s ease-in-out infinite}
-@keyframes orbA{50%{transform:translate(9vw,7vh) scale(1.12)}}
-@keyframes orbB{50%{transform:translate(-7vw,8vh) scale(1.08)}}
-@keyframes orbC{50%{transform:translate(8vw,-8vh) scale(1.16)}}
-.noise{position:fixed;inset:0;z-index:1;pointer-events:none;opacity:.018;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
-.cursor-glow{position:fixed;width:420px;height:420px;border-radius:50%;pointer-events:none;z-index:2;
-background:radial-gradient(circle,rgba(98,87,232,.14),transparent 68%);transform:translate(-50%,-50%);transition:opacity .3s}
+::selection{background:var(--signal);color:var(--paper)}
+.mono{font-family:'IBM Plex Mono',monospace}
+.serif{font-family:'Source Serif 4',serif}
 
-.wrap{width:min(1180px,calc(100% - 40px));margin:auto}
-.site-header{position:relative;z-index:10;padding:24px 0}
-.header-inner{display:flex;align-items:center;justify-content:space-between}
-.brand{display:flex;align-items:center;gap:10px;font-family:Manrope,sans-serif;font-size:16px;font-weight:800;letter-spacing:-.03em}
-.mark{width:10px;height:10px;border-radius:50%;background:linear-gradient(135deg,var(--violet),var(--pink) 55%,var(--cyan));box-shadow:0 0 24px rgba(120,103,255,.65)}
-.badge{font-size:10px;text-transform:uppercase;letter-spacing:.14em;color:#777489;border:1px solid var(--line);padding:6px 9px;border-radius:99px;margin-left:5px}
+/* ---------- boot sequence (replaces generic spinner intro) ---------- */
+.boot{position:fixed;inset:0;z-index:100;background:var(--ink);color:#d8d6c8;
+display:flex;align-items:center;justify-content:center;transition:opacity .5s ease}
+.boot.done{opacity:0;pointer-events:none}
+.boot-inner{width:420px;max-width:82vw}
+.boot-line{font-family:'IBM Plex Mono',monospace;font-size:13px;line-height:1.9;
+color:#8a8878;opacity:0;transform:translateY(3px)}
+.boot-line.show{opacity:1;transform:none;transition:opacity .25s ease,transform .25s ease}
+.boot-line .ok{color:#7fb89c}
+.boot-cursor{display:inline-block;width:7px;height:13px;background:#7fb89c;
+margin-left:4px;vertical-align:-2px;animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
 
-#auth-screen{position:relative;z-index:5;min-height:calc(100vh - 74px);display:grid;grid-template-columns:1.08fr .92fr;align-items:center;gap:6vw;padding:30px 0 70px;transition:opacity .55s ease,filter .55s ease}
-#auth-screen.leaving{opacity:0;filter:blur(16px) scale(.985)}
-.hero{padding:30px 0 30px clamp(24px,4.5vw,72px);max-width:720px}
-.eyebrow{display:flex;align-items:center;gap:9px;text-transform:uppercase;letter-spacing:.18em;font-size:11px;color:#6d697d;font-weight:700;margin-bottom:25px;opacity:0;animation:rise .8s .1s cubic-bezier(.16,1,.3,1) forwards}
-.live-dot{width:6px;height:6px;border-radius:50%;background:var(--cyan);box-shadow:0 0 15px var(--cyan);animation:pulse 2s infinite}
-@keyframes pulse{50%{opacity:.35;transform:scale(.7)}}
-.hero h1{font-family:Manrope,sans-serif;font-size:clamp(48px,6.5vw,82px);line-height:.97;letter-spacing:-.065em;max-width:720px;margin:0 0 28px;font-weight:800}
-.hero h1 .line{display:block;overflow:hidden}
-.hero h1 .line span{display:block;transform:translateY(110%);opacity:0;animation:heroLine 1s cubic-bezier(.16,1,.3,1) forwards}
-.hero h1 .line:nth-child(1) span{animation-delay:.22s}
-.hero h1 .line:nth-child(2) span{animation-delay:.31s}
-.hero h1 .line:nth-child(3) span{animation-delay:.40s}
-@keyframes heroLine{to{transform:translateY(0);opacity:1}}
-.serif{font-family:'Instrument Serif',serif;font-style:italic;font-weight:400;
-background:linear-gradient(100deg,#e99bd0,#ffd39c);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
-.hero-copy{max-width:540px;color:#676379;font-size:16px;line-height:1.7;margin:0 0 38px;opacity:0;animation:rise .8s .7s cubic-bezier(.16,1,.3,1) forwards}
-.stats{display:flex;gap:35px;opacity:0;animation:rise .8s .84s cubic-bezier(.16,1,.3,1) forwards}
-.stat-number{font-family:Manrope;font-size:23px;font-weight:800;letter-spacing:-.04em}
-.stat-label{font-size:11px;color:var(--faint);margin-top:4px}
-@keyframes rise{to{opacity:1;transform:translateY(0)}}
-.hero .eyebrow,.hero-copy,.stats{transform:translateY(18px)}
+/* ---------- header ---------- */
+.wrap{max-width:1180px;margin:0 auto;padding:0 32px}
+.site-header{position:sticky;top:0;z-index:20;background:rgba(250,248,242,.92);
+backdrop-filter:blur(6px);border-bottom:1px solid var(--line)}
+.header-inner{display:flex;align-items:center;justify-content:space-between;height:60px}
+.brand{display:flex;align-items:center;gap:9px;font-weight:600;font-size:15px;letter-spacing:-.01em}
+.brand .mark{width:9px;height:9px;background:var(--ink);flex:none}
+.badge{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);
+border:1px solid var(--line-strong);padding:2px 7px;letter-spacing:.02em;margin-left:2px}
+#userbar{display:none;align-items:center;gap:14px;font-size:13px;color:var(--muted)}
+#userbar button{background:none;border:1px solid var(--line-strong);padding:6px 13px;
+font-size:12.5px;color:var(--ink)}
+#userbar button:hover{border-color:var(--ink)}
 
-.auth-side{display:flex;justify-content:center;perspective:1200px}
-.auth-shell{width:min(430px,100%);transform:translateY(28px) scale(.97);opacity:0;animation:cardIn 1s .22s cubic-bezier(.16,1,.3,1) forwards}
-@keyframes cardIn{to{transform:translateY(0) scale(1);opacity:1}}
-.auth-card{position:relative;padding:34px;border:1px solid var(--line);border-radius:28px;
-background:linear-gradient(145deg,rgba(255,255,255,.96),rgba(250,249,255,.82));
-box-shadow:0 30px 80px rgba(54,46,100,.14),0 8px 25px rgba(54,46,100,.06),inset 0 1px rgba(255,255,255,.9);
-backdrop-filter:blur(28px);-webkit-backdrop-filter:blur(28px);overflow:hidden}
-.auth-card:before{content:"";position:absolute;inset:-1px;border-radius:28px;padding:1px;
-background:linear-gradient(125deg,rgba(98,87,232,.45),transparent 35%,transparent 67%,rgba(23,169,207,.28));
--webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none}
-.card-shine{position:absolute;width:220px;height:220px;border-radius:50%;background:rgba(98,87,232,.10);filter:blur(55px);right:-90px;top:-100px;pointer-events:none}
-.auth-brand{margin-bottom:30px}
-.auth-card h2{font-family:Manrope;font-size:26px;letter-spacing:-.045em;margin:0 0 7px}
-.auth-sub{color:#777387;font-size:13px;line-height:1.55;margin:0 0 25px}
-.tabs{display:flex;gap:4px;padding:4px;border-radius:12px;background:#f3f2f9;border:1px solid rgba(28,25,50,.07);margin-bottom:24px}
-.tabs button{flex:1;border:0;border-radius:9px;padding:9px 5px;background:transparent;color:#777386;font-size:12px;font-weight:600;transition:.25s}
-.tabs button.active{color:white;background:linear-gradient(110deg,rgba(98,87,232,.98),rgba(228,91,157,.90));box-shadow:0 7px 22px rgba(120,103,255,.18)}
-label{display:block;color:#8f8f9a;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;margin:16px 0 7px}
-label:first-of-type{margin-top:0}
-input{width:100%;border:1px solid rgba(28,25,50,.13);border-radius:11px;padding:12px 13px;background:rgba(247,247,251,.86);color:var(--text);outline:0;font-size:13px;transition:.25s}
-input::placeholder{color:#aaa6b7}
-input:focus{border-color:rgba(120,103,255,.85);box-shadow:0 0 0 4px rgba(120,103,255,.10),0 0 30px rgba(120,103,255,.08)}
-.hint{font-size:10.5px;color:#858093;margin-top:6px;line-height:1.45}
-.btn-primary{position:relative;overflow:hidden;width:100%;margin-top:22px;border:0;border-radius:11px;padding:13px;color:white;font-size:13px;font-weight:700;
-background:linear-gradient(110deg,#6858f4,#a05be5 52%,#e66a9d);background-size:180% 100%;
-box-shadow:0 12px 32px rgba(98,87,232,.22);transition:.35s}
-.btn-primary:before{content:"";position:absolute;top:0;left:-100%;width:55%;height:100%;background:linear-gradient(100deg,transparent,rgba(255,255,255,.28),transparent);transform:skewX(-18deg);transition:.6s}
-.btn-primary:hover{background-position:100% 0;transform:translateY(-1px);box-shadow:0 17px 40px rgba(120,103,255,.31)}
-.btn-primary:hover:before{left:150%}
-.btn-primary:active{transform:scale(.985)}
-.btn-secondary{padding:10px 18px;background:transparent;border:1px solid var(--line);border-radius:9px;color:#393645;font-size:12px;font-weight:600}
-.msg{font-size:12px;padding:10px 12px;border-radius:10px;margin-top:15px;line-height:1.5}
-.msg.err{background:rgba(255,90,90,.1);border:1px solid rgba(255,90,90,.18);color:#ff9d9d}
-.msg.ok{background:rgba(80,210,150,.1);border:1px solid rgba(80,210,150,.18);color:#8de2bb}
-.spinner{width:14px;height:14px;border:2px solid rgba(255,255,255,.25);border-top-color:white;border-radius:50%;display:inline-block;animation:spin .7s linear infinite;vertical-align:-3px;margin-right:7px}
+/* ---------- hero / auth screen ---------- */
+#auth-screen{opacity:0;transform:translateY(8px);transition:opacity .5s ease,transform .5s ease}
+#auth-screen.ready{opacity:1;transform:none}
+#auth-screen.leaving{opacity:0;transform:translateY(-6px)}
+.split{max-width:1180px;margin:0 auto;padding:64px 32px 80px;display:grid;
+grid-template-columns:1.15fr .85fr;gap:64px;align-items:start}
+@media(max-width:900px){.split{grid-template-columns:1fr;padding:36px 20px 56px;gap:40px}}
+
+.eyebrow{font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--muted);
+display:flex;align-items:center;gap:7px;margin-bottom:22px;letter-spacing:.02em}
+.live-dot{width:6px;height:6px;border-radius:50%;background:var(--signal);
+box-shadow:0 0 0 3px var(--signal-bg)}
+
+.hero h1{font-family:'Source Serif 4',serif;font-weight:400;font-size:44px;
+line-height:1.14;letter-spacing:-.01em;margin:0 0 20px;max-width:620px}
+.hero h1 em{font-style:italic;color:var(--signal)}
+@media(max-width:900px){.hero h1{font-size:32px}}
+.hero-copy{font-size:15.5px;line-height:1.65;color:var(--muted);max-width:480px;margin:0 0 32px}
+
+/* signature element: live scan ticker */
+.scanlog{border:1px solid var(--line-strong);background:var(--ink);color:#c9c7b8;
+max-width:480px;margin-bottom:34px}
+.scanlog-head{display:flex;justify-content:space-between;align-items:center;
+padding:9px 14px;border-bottom:1px solid rgba(255,255,255,.12);
+font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:.03em;color:#8a8878}
+.scanlog-body{padding:13px 14px;font-family:'IBM Plex Mono',monospace;font-size:12px;
+line-height:2.1;min-height:130px}
+.scanlog-row{display:flex;justify-content:space-between;gap:10px;opacity:0;
+animation:rowIn .4s ease forwards}
+.scanlog-row .co{color:#e4e2d4}
+.scanlog-row .st{color:#7fb89c}
+@keyframes rowIn{to{opacity:1}}
+
+.stats{display:flex;gap:36px;padding-top:26px;border-top:1px solid var(--line);max-width:480px}
+.stat-number{font-family:'Source Serif 4',serif;font-size:25px;line-height:1}
+.stat-label{font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:var(--muted);
+margin-top:6px;letter-spacing:.01em}
+
+/* ---------- auth card ---------- */
+.auth-card{background:var(--paper2);border:1px solid var(--line-strong);padding:34px 30px;position:relative}
+.micro-label{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--muted);
+letter-spacing:.05em;margin-bottom:16px}
+.auth-card h2{font-family:'Source Serif 4',serif;font-weight:400;font-size:24px;margin:0 0 8px}
+.auth-sub{font-size:13.5px;color:var(--muted);margin:0 0 22px;line-height:1.5}
+
+.tabs{display:flex;border:1px solid var(--line-strong);margin-bottom:22px}
+.tabs button{flex:1;background:none;border:none;padding:9px;font-size:12.5px;
+color:var(--muted);border-right:1px solid var(--line-strong)}
+.tabs button:last-child{border-right:none}
+.tabs button.active{background:var(--ink);color:var(--paper)}
+
+form label{display:block;font-size:11.5px;color:var(--muted);margin:14px 0 5px;letter-spacing:.01em}
+form label:first-child{margin-top:0}
+form input{width:100%;padding:10px 11px;border:1px solid var(--line-strong);
+background:var(--paper);font-size:13.5px;color:var(--ink)}
+form input:focus{outline:none;border-color:var(--ink)}
+.hint{font-size:11px;color:var(--faint);margin-top:4px;line-height:1.4}
+
+.btn-primary{width:100%;margin-top:22px;padding:11px;background:var(--ink);color:var(--paper);
+border:1px solid var(--ink);font-size:13.5px;font-weight:500;display:flex;
+align-items:center;justify-content:center;gap:8px}
+.btn-primary:hover{background:#000}
+.btn-primary:disabled{opacity:.6;cursor:default}
+.btn-secondary{padding:9px;background:none;border:1px solid var(--line-strong);
+color:var(--ink);font-size:12.5px}
+.btn-secondary:hover{border-color:var(--ink)}
+.spinner{width:12px;height:12px;border:2px solid rgba(250,248,242,.35);
+border-top-color:var(--paper);border-radius:50%;animation:spin .7s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 
-#dashboard{position:relative;z-index:5;padding:35px 0 90px}
-#dashboard.page-reveal{opacity:0;transform:translateY(16px)}
+.msg{margin-top:14px;padding:9px 12px;font-size:12.5px;border:1px solid}
+.msg.ok{background:var(--signal-bg);border-color:var(--signal-line);color:var(--signal)}
+.msg.err{background:var(--danger-bg);border-color:#e2b9b7;color:var(--danger)}
+
+/* ---------- dashboard ---------- */
+#dashboard{display:none;padding:44px 0 70px}
+#dashboard.ready{display:block}
 .grid{display:grid;grid-template-columns:340px 1fr;gap:22px;align-items:start}
-.card{background:rgba(255,255,255,.82);border:1px solid var(--line);border-radius:20px;padding:24px;margin-bottom:18px;backdrop-filter:blur(18px);box-shadow:0 20px 50px rgba(54,46,100,.08);transition:.25s}
-.card:hover{border-color:rgba(98,87,232,.28);transform:translateY(-2px)}
-.card h2{font-family:Manrope;font-size:15px;margin:0 0 5px;letter-spacing:-.02em}
-.card p.desc{font-size:11.5px;color:#777386;line-height:1.5;margin:0 0 17px}
-.dropzone{border:1px dashed rgba(28,25,50,.15);border-radius:13px;padding:23px;text-align:center;color:#706c7d;font-size:12px;cursor:pointer;transition:.25s}
-.dropzone:hover{border-color:var(--violet);background:rgba(120,103,255,.06)}
-.dropzone .fname{font-size:11px;color:#777386;margin-top:7px}
-.skill-pill{display:inline-block;background:rgba(98,87,232,.08);color:#5147c8;font-size:10.5px;padding:5px 9px;border:1px solid rgba(98,87,232,.18);border-radius:20px;margin:3px 4px 0 0;animation:pill .35s both}
-@keyframes pill{from{opacity:0;transform:scale(.8)}to{opacity:1;transform:scale(1)}}
-.toggle-row{display:flex;align-items:center;justify-content:space-between;padding:11px 0;border-top:1px solid rgba(28,25,50,.07)}
-.toggle-row:first-of-type{border-top:0}
-.toggle-row span{font-size:12px;color:#706c7d}
-.switch{position:relative;width:38px;height:22px;display:block}
+@media(max-width:900px){.grid{grid-template-columns:1fr}}
+
+.card{background:var(--paper2);border:1px solid var(--line-strong);padding:24px;margin-bottom:22px}
+.card h2{font-family:'Source Serif 4',serif;font-weight:400;font-size:19px;margin:0 0 6px}
+.card .desc{font-size:13px;color:var(--muted);line-height:1.5;margin:0 0 18px}
+
+.dropzone{border:1px dashed var(--line-strong);padding:22px;text-align:center;
+font-size:13px;color:var(--muted);cursor:pointer}
+.dropzone:hover{border-color:var(--ink);color:var(--ink)}
+.fname{font-family:'IBM Plex Mono',monospace;font-size:11px;margin-top:6px;color:var(--signal)}
+.skill-pill{display:inline-block;font-family:'IBM Plex Mono',monospace;font-size:10.5px;
+border:1px solid var(--line-strong);padding:3px 9px;margin:0 6px 6px 0;color:var(--muted);
+opacity:0;animation:pillIn .3s ease forwards}
+@keyframes pillIn{to{opacity:1}}
+
+.toggle-row{display:flex;justify-content:space-between;align-items:center;font-size:13.5px}
+.switch{position:relative;width:38px;height:21px;display:inline-block}
 .switch input{opacity:0;width:0;height:0}
-.slider{position:absolute;inset:0;border-radius:22px;background:#eeeef5;border:1px solid rgba(28,25,50,.13);transition:.2s}
-.slider:before{content:"";position:absolute;width:15px;height:15px;left:2px;top:2px;border-radius:50%;background:#eee;transition:.2s}
-.switch input:checked+.slider{background:linear-gradient(120deg,var(--violet),var(--pink));border-color:transparent}
-.switch input:checked+.slider:before{transform:translateX(17px)}
-.search-row{display:grid;grid-template-columns:1fr 1fr auto;gap:8px;margin-bottom:17px}
-.search-row button{border:0;border-radius:11px;padding:0 18px;color:white;background:linear-gradient(120deg,var(--violet),var(--pink));font-size:12px;font-weight:700}
-.job-card{border:1px solid rgba(28,25,50,.09);border-radius:13px;padding:16px 17px;margin-bottom:9px;background:rgba(248,248,252,.88);animation:jobIn .45s both}
-@keyframes jobIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
-.job-card .row{display:flex;justify-content:space-between;gap:12px}
-.job-card h3{font-size:13px;margin:0 0 3px;font-family:DM Sans}
-.job-card .meta,.job-card .desc{font-size:11px;color:#777386;margin:0;line-height:1.5}
-.job-card .desc{margin-top:8px;color:#6f6a7c}
-.score-badge{font-size:10px;font-weight:700;color:#aaa1ff;background:rgba(120,103,255,.1);border:1px solid rgba(98,87,232,.18);padding:5px 9px;border-radius:20px;height:max-content}
-.job-card a{display:inline-block;margin-top:9px;color:#6bdcff;text-decoration:none;font-size:11px;font-weight:700}
-.empty{font-size:12px;color:#777386;text-align:center;padding:30px 0}
-.note{font-size:10.5px;color:#858093;background:#f4f3f8;border-radius:9px;padding:10px;line-height:1.45;margin-top:10px}
-.skeleton{height:80px;border-radius:13px;margin-bottom:9px;background:linear-gradient(90deg,rgba(28,25,50,.035) 25%,rgba(28,25,50,.075) 37%,rgba(28,25,50,.035) 63%);background-size:400% 100%;animation:shimmer 1.4s infinite}
-@keyframes shimmer{to{background-position:-100% 0}}
-#userbar{display:none;align-items:center;gap:14px;font-size:12px;color:#706c7d}
-#userbar button{background:transparent;border:1px solid var(--line);border-radius:9px;color:#393645;padding:7px 12px;font-size:11px}
-#dash-header{display:none;position:relative;z-index:10;border-bottom:1px solid rgba(28,25,50,.07);padding:18px 0}
+.slider{position:absolute;inset:0;background:var(--line-strong);cursor:pointer;transition:.2s}
+.slider:before{content:'';position:absolute;width:15px;height:15px;left:3px;top:3px;
+background:var(--paper);transition:.2s}
+.switch input:checked + .slider{background:var(--signal)}
+.switch input:checked + .slider:before{transform:translateX(17px)}
+.note{font-size:11px;color:var(--faint);margin-top:8px;line-height:1.4}
 
-/*
-  ==== VISIBILITY GATE (bug fix) ====
-  Root problem: dashboard visibility was previously toggled only via
-  inline style.display from JS, which could momentarily reveal the
-  dashboard for anyone with a stale/expired token still sitting in
-  localStorage - the UI would show it optimistically before the async
-  /auth/me check had a chance to reject it and hide it again. That's a
-  real gap: it means dashboard content could flash for someone who
-  isn't actually authenticated by the server's standard.
+.search-row{display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap}
+.search-row input{flex:1;min-width:150px;padding:10px 11px;border:1px solid var(--line-strong);
+background:var(--paper);font-size:13px}
+.search-row input:focus{outline:none;border-color:var(--ink)}
+.search-row button{padding:10px 18px;background:var(--ink);color:var(--paper);
+border:1px solid var(--ink);font-size:13px}
 
-  Fix: gate BOTH screens off a single source of truth - a `authed`
-  class on <body> that is only ever added AFTER the server has
-  confirmed the token via /auth/me. These two rules are !important so
-  no inline style set by other JS can accidentally leave both screens
-  visible (or both hidden) at once, regardless of load order.
-*/
-body:not(.authed) #dashboard{display:none !important}
-body.authed #auth-screen{display:none !important}
-body.authed #dashboard{display:block}
-#dashboard{display:none}
+.empty{font-size:13px;color:var(--muted);padding:20px 0;text-align:center;
+border:1px dashed var(--line-strong)}
+.skeleton{height:64px;background:linear-gradient(90deg,var(--paper2),var(--line),var(--paper2));
+background-size:200% 100%;animation:shimmer 1.3s infinite;margin-bottom:10px}
+@keyframes shimmer{to{background-position:-200% 0}}
 
-@media(max-width:900px){
- #auth-screen{grid-template-columns:1fr;gap:15px;padding-top:20px}
- .hero{padding:10px 0 5px}.hero h1{font-size:clamp(48px,12vw,72px)}
- .auth-side{justify-content:flex-start}.auth-shell{max-width:520px}
- .grid{grid-template-columns:1fr}
-}
-@media(max-width:620px){
- .wrap{width:min(100% - 28px,1180px)}
- .site-header{padding:18px 0}.badge{display:none}
- #auth-screen{min-height:auto;padding:35px 0 60px}
- .hero-copy{font-size:14px}.stats{gap:22px}
- .auth-card{padding:27px 21px;border-radius:22px}
- .search-row{grid-template-columns:1fr}.search-row button{height:42px}
-}
-@media(prefers-reduced-motion:reduce){
- *,*:before,*:after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}
-}
-
-/* ===== TOP-TIER OPENING EXPERIENCE ===== */
-.intro-screen{
-  position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;
-  background:#fbfbfe;color:#171625;overflow:hidden;
-  transition:opacity .9s cubic-bezier(.16,1,.3,1),visibility .9s;
-}
-.intro-screen.done{opacity:0;visibility:hidden;pointer-events:none}
-.intro-grid{
-  position:absolute;inset:0;opacity:.34;
-  background-image:linear-gradient(rgba(98,87,232,.055) 1px,transparent 1px),
-    linear-gradient(90deg,rgba(98,87,232,.055) 1px,transparent 1px);
-  background-size:72px 72px;
-  mask-image:radial-gradient(circle at center,#000 0%,transparent 72%);
-}
-.intro-glow{
-  position:absolute;width:52vw;height:52vw;border-radius:50%;
-  background:radial-gradient(circle,rgba(98,87,232,.14),rgba(228,91,157,.055) 36%,transparent 70%);
-  filter:blur(8px);animation:introBreathe 3.2s ease-in-out infinite;
-}
-@keyframes introBreathe{50%{transform:scale(1.08);opacity:.8}}
-.intro-core{position:relative;z-index:2;text-align:center}
-.intro-logo{
-  display:flex;align-items:center;justify-content:center;gap:13px;
-  font-family:Manrope,sans-serif;font-size:28px;font-weight:800;letter-spacing:-.055em;
-  opacity:0;transform:translateY(18px) scale(.96);
-  animation:introLogo 1s .15s cubic-bezier(.16,1,.3,1) forwards;
-}
-.intro-logo .mark{width:13px;height:13px}
-.intro-tag{
-  margin-top:16px;font-size:10px;letter-spacing:.24em;text-transform:uppercase;
-  color:#8a8698;opacity:0;animation:introText .8s .62s ease forwards;
-}
-.intro-rule{
-  width:0;height:1px;margin:26px auto 0;
-  background:linear-gradient(90deg,transparent,var(--violet),var(--pink),transparent);
-  animation:introRule 1s .9s cubic-bezier(.16,1,.3,1) forwards;
-}
-.intro-progress{
-  position:absolute;left:0;bottom:0;width:100%;height:2px;background:rgba(28,25,50,.05);
-}
-.intro-progress:after{
-  content:"";display:block;width:0;height:100%;
-  background:linear-gradient(90deg,var(--violet),var(--pink),var(--cyan));
-  animation:introProgress 1.75s cubic-bezier(.16,1,.3,1) forwards;
-}
-@keyframes introLogo{to{opacity:1;transform:none}}
-@keyframes introText{to{opacity:1}}
-@keyframes introRule{to{width:180px}}
-@keyframes introProgress{to{width:100%}}
-
-.page-reveal{opacity:0;transform:translateY(16px)}
-.page-reveal.ready{animation:pageReveal 1s .08s cubic-bezier(.16,1,.3,1) forwards}
-@keyframes pageReveal{to{opacity:1;transform:none}}
-
-.hero h1 .accent-dot{
-  display:inline-block;width:8px;height:8px;border-radius:50%;vertical-align:top;
-  margin:9px 0 0 5px;background:linear-gradient(135deg,var(--pink),var(--violet));
-  box-shadow:0 0 20px rgba(228,91,157,.28);
-}
-.trust-line{
-  display:flex;align-items:center;gap:9px;margin-top:27px;color:#8b8798;font-size:10.5px;
-  opacity:0;animation:rise .8s 1.02s cubic-bezier(.16,1,.3,1) forwards;
-}
-.trust-line .mini-check{
-  width:17px;height:17px;border-radius:50%;display:grid;place-items:center;
-  background:rgba(63,174,123,.11);color:#3fae7b;font-size:10px;font-weight:800;
-}
-.auth-card .micro-label{
-  display:flex;align-items:center;gap:7px;margin-bottom:17px;color:#9a96a7;
-  font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.14em;
-}
-.auth-card .micro-label:before{
-  content:"";width:5px;height:5px;border-radius:50%;background:#3fae7b;
-  box-shadow:0 0 10px rgba(63,174,123,.45);
-}
-.floating-detail{
-  position:absolute;z-index:2;pointer-events:none;border:1px solid rgba(28,25,50,.07);
-  background:rgba(255,255,255,.72);backdrop-filter:blur(16px);
-  border-radius:13px;padding:10px 12px;box-shadow:0 15px 35px rgba(54,46,100,.07);
-  font-size:9px;color:#858093;letter-spacing:.02em;
-}
-.detail-one{right:5%;top:25%;animation:floatOne 6s ease-in-out infinite}
-.detail-two{left:4%;bottom:19%;animation:floatTwo 7s ease-in-out infinite}
-@keyframes floatOne{50%{transform:translateY(-10px) rotate(1deg)}}
-@keyframes floatTwo{50%{transform:translateY(9px) rotate(-1deg)}}
-@media(max-width:900px){.floating-detail{display:none}}
+.job-card{border:1px solid var(--line-strong);border-top:none;padding:15px 16px;
+opacity:0;animation:rowIn .4s ease forwards}
+.job-card:first-child{border-top:1px solid var(--line-strong)}
+.job-card .row{display:flex;justify-content:space-between;align-items:flex-start;gap:14px}
+.job-card h3{font-size:14.5px;font-weight:500;margin:0}
+.job-card .meta{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);margin:4px 0 0}
+.job-card .desc{font-size:12.5px;color:var(--muted);line-height:1.55;margin:10px 0}
+.job-card a{font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--ink);text-decoration:none;border-bottom:1px solid var(--ink)}
+.score-badge{font-family:'IBM Plex Mono',monospace;font-size:11px;padding:3px 9px;flex:none;
+background:var(--signal-bg);color:var(--signal);border:1px solid var(--signal-line)}
 </style>
 </head>
 <body>
-<noscript><style>.page-reveal{opacity:1 !important;transform:none !important}.intro-screen{display:none !important}</style></noscript>
-<div class="intro-screen" id="intro-screen">
-  <div class="intro-grid"></div>
-  <div class="intro-glow"></div>
-  <div class="intro-core">
-    <div class="intro-logo"><span class="mark"></span>Waypost</div>
-    <div class="intro-tag">Placement intelligence</div>
-    <div class="intro-rule"></div>
-  </div>
-  <div class="intro-progress"></div>
-</div>
-<div class="mesh"><div class="orb a"></div><div class="orb b"></div><div class="orb c"></div></div>
-<div class="noise"></div><div class="cursor-glow" id="cursor-glow"></div>
+<noscript><style>#auth-screen{opacity:1 !important;transform:none !important}.boot{display:none !important}</style></noscript>
 
-<header class="site-header" id="site-header">
+<div class="boot" id="boot">
+  <div class="boot-inner">
+    <div class="boot-line" data-t="0">connecting <span class="ok">greenhouse.io</span></div>
+    <div class="boot-line" data-t="1">connecting <span class="ok">lever.co</span></div>
+    <div class="boot-line" data-t="2">connecting <span class="ok">ashby.hq</span></div>
+    <div class="boot-line" data-t="3">ready<span class="boot-cursor"></span></div>
+  </div>
+</div>
+
+<header class="site-header">
  <div class="wrap header-inner">
-  <div class="brand"><span class="mark"></span>Waypost <span class="badge">Placement agent</span></div>
+  <div class="brand"><span class="mark"></span>Waypost <span class="badge">placement agent</span></div>
   <div id="userbar"><span id="userbar-name"></span><button onclick="logout()">Log out</button></div>
  </div>
 </header>
 
-<div id="auth-screen" class="page-reveal">
- <section class="hero">
-  <div class="eyebrow"><span class="live-dot"></span>Waypost · Placement intelligence</div>
-  <h1>
-   <span class="line"><span>Every posting</span></span>
-   <span class="line"><span>is a point on</span></span>
-   <span class="line"><span>your <em class="serif">map.</em><i class="accent-dot"></i></span></span>
-  </h1>
-  <p class="hero-copy">New roles appear across the web every hour. Waypost quietly tracks them, understands your profile, and surfaces the opportunities actually worth your time.</p>
-  <div class="trust-line"><span class="mini-check">✓</span> Built to reduce the noise between you and the right opportunity</div>
-  <div class="stats">
-   <div><div class="stat-number">3</div><div class="stat-label">Live sources tracked</div></div>
-   <div><div class="stat-number">24/7</div><div class="stat-label">Hourly scanning</div></div>
-   <div><div class="stat-number">0</div><div class="stat-label">Manual refreshing</div></div>
-  </div>
- </section>
+<div id="auth-screen">
+ <div class="split">
+  <section class="hero">
+   <div class="eyebrow"><span class="live-dot"></span>waypost · placement intelligence</div>
+   <h1>The job board that reads job boards <em>for you.</em></h1>
+   <p class="hero-copy">New roles appear across the web every hour. Waypost scans them quietly, checks each one against your resume, and only tells you what's actually worth applying to.</p>
 
- <section class="auth-side">
-  <div class="auth-shell" id="auth-shell">
+   <div class="scanlog">
+    <div class="scanlog-head"><span>scan.log</span><span id="scanlog-clock" class="mono">--:--</span></div>
+    <div class="scanlog-body" id="scanlog-body"></div>
+   </div>
+
+   <div class="stats">
+    <div><div class="stat-number">3</div><div class="stat-label">sources tracked</div></div>
+    <div><div class="stat-number">24/7</div><div class="stat-label">hourly scanning</div></div>
+    <div><div class="stat-number">0</div><div class="stat-label">manual refreshing</div></div>
+   </div>
+  </section>
+
+  <section class="auth-side">
    <div class="auth-card">
-    <div class="micro-label">Private workspace</div>
-    <div class="card-shine"></div>
-    <div class="brand auth-brand"><span class="mark"></span>Waypost</div>
+    <div class="micro-label">private workspace</div>
     <h2>Find your next role.</h2>
     <p class="auth-sub">Sign in to see matches, or create an account to start tracking.</p>
 
@@ -326,7 +233,7 @@ body.authed #dashboard{display:block}
      <label>Password</label>
      <input type="password" id="login-password" required placeholder="••••••••" />
      <button class="btn-primary" type="submit" id="login-btn">Log in</button>
-     <div style="text-align:center;margin-top:15px"><a href="#" onclick="switchTab('forgot');return false;" style="font-size:11.5px;color:#777386">Forgot password?</a></div>
+     <div style="text-align:center;margin-top:15px"><a href="#" onclick="switchTab('forgot');return false;" style="font-size:11.5px;color:var(--muted)">Forgot password?</a></div>
     </form>
 
     <form id="register-form" onsubmit="return handleRegister(event)" style="display:none">
@@ -346,7 +253,7 @@ body.authed #dashboard{display:block}
      <p class="auth-sub" style="margin:0 0 5px">Enter your account email to see your security question.</p>
      <label>Email</label><input type="email" id="forgot-email" required placeholder="you@email.com" />
      <button class="btn-primary" type="submit" id="forgot-btn">Continue</button>
-     <div style="text-align:center;margin-top:15px"><a href="#" onclick="switchTab('login');return false;" style="font-size:11.5px;color:#777386">Back to log in</a></div>
+     <div style="text-align:center;margin-top:15px"><a href="#" onclick="switchTab('login');return false;" style="font-size:11.5px;color:var(--muted)">Back to log in</a></div>
     </form>
 
     <form id="reset-form" onsubmit="return handleResetWithAnswer(event)" style="display:none">
@@ -357,13 +264,11 @@ body.authed #dashboard{display:block}
     </form>
     <div id="auth-msg"></div>
    </div>
-  </div>
- <div class="floating-detail detail-one">LIVE SOURCES · 03</div>
-  <div class="floating-detail detail-two">MATCH SIGNALS · ACTIVE</div>
- </section>
+  </section>
+ </div>
 </div>
 
-<div id="dashboard" class="page-reveal">
+<div id="dashboard">
  <div class="wrap">
   <div class="grid">
    <div>
@@ -393,8 +298,6 @@ body.authed #dashboard{display:block}
 <script>
 const API = '';
 let token = localStorage.getItem('waypost_token') || null;
-
-
 
 function switchTab(tab){
   document.getElementById('tab-login').classList.toggle('active', tab==='login');
@@ -497,6 +400,7 @@ async function onAuthed(data){
     const me = await api('/auth/me');
     setTimeout(() => {
       authScreen.classList.remove('leaving');
+      authScreen.style.display = 'none';
       revealDashboard(me);
     }, 420);
   }catch(err){
@@ -525,6 +429,8 @@ function logout(){
   token = null; localStorage.removeItem('waypost_token');
   document.body.classList.remove('authed');
   document.getElementById('userbar').style.display = 'none';
+  document.getElementById('dashboard').classList.remove('ready');
+  document.getElementById('auth-screen').style.display = 'block';
 }
 
 function renderSkills(skills){
@@ -589,58 +495,53 @@ if(token){
   onAuthed({access_token: token, user:{name:''}}).catch(()=>{});
 }
 </script>
-<script>
-(function(){
- const glow=document.getElementById('cursor-glow');
- if(glow && matchMedia('(pointer:fine)').matches){
-  window.addEventListener('pointermove',e=>{
-   glow.style.left=e.clientX+'px'; glow.style.top=e.clientY+'px';
-  },{passive:true});
- }
- const shell=document.getElementById('auth-shell');
- if(shell && matchMedia('(pointer:fine)').matches){
-  window.addEventListener('pointermove',e=>{
-   const r=shell.getBoundingClientRect();
-   const x=(e.clientX-(r.left+r.width/2))/r.width;
-   const y=(e.clientY-(r.top+r.height/2))/r.height;
-   shell.style.transform=`translateY(0) rotateY(${x*2.2}deg) rotateX(${-y*2.2}deg)`;
-  },{passive:true});
-  window.addEventListener('pointerleave',()=>shell.style.transform='translateY(0) rotateY(0) rotateX(0)');
- }
-})();
-</script>
 
 <script>
+/* Terminal-style boot sequence - a genuine, on-brand loading moment
+   (the agent "connecting" to the sources it actually reads) instead of
+   a generic spinner or gradient splash. Runs once per page load,
+   independent of auth state below it. */
 (function(){
-  const intro = document.getElementById('intro-screen');
-  const auth = document.getElementById('auth-screen');
-  let revealed = false;
+  const boot = document.getElementById('boot');
+  const authScreen = document.getElementById('auth-screen');
+  const lines = document.querySelectorAll('.boot-line');
+  lines.forEach((el, i) => setTimeout(() => el.classList.add('show'), 160 + i*220));
   const finish = () => {
-    if(revealed) return; revealed = true;
-    if(intro){ intro.classList.add('done'); setTimeout(()=>intro.remove(),1000); }
-    if(auth) auth.classList.add('ready');
+    boot.classList.add('done');
+    authScreen.classList.add('ready');
+    setTimeout(() => boot.remove(), 550);
   };
-  // Primary path: a short cinematic pause after the page has fully loaded.
-  if(document.readyState === 'complete'){ setTimeout(finish, 900); }
-  else{ window.addEventListener('load', () => setTimeout(finish, 1400), {once:true}); }
-  // Hard safety net: guarantees the page is never left blank, even if
-  // the load event never fires or fires before this listener attaches.
-  setTimeout(finish, 3200);
+  setTimeout(finish, 160 + lines.length*220 + 260);
 })();
-</script>
 
-  // Gentle magnetic CTA response.
-  document.addEventListener('pointermove',e=>{
-    const btn=e.target.closest('.btn-primary');
-    if(!btn || matchMedia('(pointer:fine)').matches===false) return;
-    const r=btn.getBoundingClientRect(), x=(e.clientX-r.left-r.width/2)/r.width;
-    const y=(e.clientY-r.top-r.height/2)/r.height;
-    btn.style.transform=`translate(${x*3}px,${y*2}px)`;
-  },{passive:true});
-  document.addEventListener('pointerout',e=>{
-    const btn=e.target.closest('.btn-primary');
-    if(btn) btn.style.transform='';
-  },{passive:true});
+/* Scan log - populates the hero's signature "scan.log" panel with a
+   short, looping readout of sources being checked. Purely
+   illustrative of what the agent does on a schedule; not a live feed. */
+(function(){
+  const body = document.getElementById('scanlog-body');
+  const clock = document.getElementById('scanlog-clock');
+  if(!body) return;
+  const rows = [
+    ['greenhouse · stripe','12 open'],
+    ['greenhouse · figma','4 open'],
+    ['lever · razorpay','7 open'],
+    ['ashby · linear','2 open'],
+    ['adzuna · full-stack, IN','31 open'],
+  ];
+  let i = 0;
+  function tick(){
+    const now = new Date();
+    clock.textContent = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
+    const r = rows[i % rows.length];
+    const row = document.createElement('div');
+    row.className = 'scanlog-row';
+    row.innerHTML = `<span class="co">${r[0]}</span><span class="st">${r[1]}</span>`;
+    body.appendChild(row);
+    if(body.children.length > 5) body.removeChild(body.firstChild);
+    i++;
+  }
+  tick();
+  setInterval(tick, 2600);
 })();
 </script>
 
