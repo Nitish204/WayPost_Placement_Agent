@@ -35,7 +35,7 @@ def _fallback_boards() -> dict:
         }
     except Exception as e:
         logger.warning(f"[ingest] couldn't load fallback companies.json: {e}")
-        return {"greenhouse": [], "lever": []}
+        return {"greenhouse": [], "lever": [], "ashby": []}
 
 
 def fetch_all_raw_jobs(search_query: str = "", search_location: str = "") -> list[dict]:
