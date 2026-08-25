@@ -12,16 +12,26 @@
   --line-strong:rgba(21,20,15,.32); --muted:#6d6b5e; --faint:#a3a191;
   --signal:#2f5d4c; --signal-bg:#e2ede6; --signal-line:#bcd3c6;
   --warn:#8a5a1f; --warn-bg:#f5ecd8; --danger:#96302f; --danger-bg:#f7e5e3;
+  --ease:cubic-bezier(.16,.8,.24,1);
 }
 *{box-sizing:border-box}
 html{scroll-behavior:smooth}
 body{margin:0;min-height:100vh;background:var(--paper);color:var(--ink);
-font-family:'Inter',sans-serif;-webkit-font-smoothing:antialiased}
+font-family:'Inter',sans-serif;-webkit-font-smoothing:antialiased;position:relative}
+body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.035;mix-blend-mode:multiply;
+background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
 button,input{font:inherit}
 button{cursor:pointer}
 ::selection{background:var(--signal);color:var(--paper)}
 .mono{font-family:'IBM Plex Mono',monospace}
 .serif{font-family:'Source Serif 4',serif}
+
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation-duration:.001s !important;transition-duration:.001s !important}
+}
+
+.reveal{opacity:0;transform:translateY(14px);transition:opacity .7s var(--ease),transform .7s var(--ease)}
+.reveal.in{opacity:1;transform:none}
 
 /* ---------- boot sequence (replaces generic spinner intro) ---------- */
 .boot{position:fixed;inset:0;z-index:100;background:var(--ink);color:#d8d6c8;
@@ -60,13 +70,18 @@ grid-template-columns:1.15fr .85fr;gap:64px;align-items:start}
 
 .eyebrow{font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:var(--muted);
 display:flex;align-items:center;gap:7px;margin-bottom:22px;letter-spacing:.02em}
-.live-dot{width:6px;height:6px;border-radius:50%;background:var(--signal);
-box-shadow:0 0 0 3px var(--signal-bg)}
+.live-dot{width:6px;height:6px;border-radius:50%;background:var(--signal);position:relative}
+.live-dot::after{content:'';position:absolute;inset:-4px;border-radius:50%;border:1px solid var(--signal);
+opacity:.6;animation:pulse 2.2s var(--ease) infinite}
+@keyframes pulse{0%{transform:scale(.6);opacity:.7}100%{transform:scale(1.9);opacity:0}}
 
 .hero h1{font-family:'Source Serif 4',serif;font-weight:400;font-size:44px;
 line-height:1.14;letter-spacing:-.01em;margin:0 0 20px;max-width:620px}
 .hero h1 em{font-style:italic;color:var(--signal)}
 @media(max-width:900px){.hero h1{font-size:32px}}
+.hero h1 .word{display:inline-block;overflow:hidden;vertical-align:top}
+.hero h1 .word span{display:inline-block;transform:translateY(105%);transition:transform .8s var(--ease)}
+.hero h1.in .word span{transform:none}
 .hero-copy{font-size:15.5px;line-height:1.65;color:var(--muted);max-width:480px;margin:0 0 32px}
 
 /* signature element: live scan ticker */
@@ -95,27 +110,33 @@ letter-spacing:.05em;margin-bottom:16px}
 .auth-card h2{font-family:'Source Serif 4',serif;font-weight:400;font-size:24px;margin:0 0 8px}
 .auth-sub{font-size:13.5px;color:var(--muted);margin:0 0 22px;line-height:1.5}
 
-.tabs{display:flex;border:1px solid var(--line-strong);margin-bottom:22px}
+.tabs{display:flex;border:1px solid var(--line-strong);margin-bottom:22px;position:relative}
 .tabs button{flex:1;background:none;border:none;padding:9px;font-size:12.5px;
-color:var(--muted);border-right:1px solid var(--line-strong)}
+color:var(--muted);border-right:1px solid var(--line-strong);position:relative;z-index:1;
+transition:color .35s var(--ease)}
 .tabs button:last-child{border-right:none}
-.tabs button.active{background:var(--ink);color:var(--paper)}
+.tabs button.active{color:var(--paper)}
+.tabs .slider-bg{position:absolute;top:0;bottom:0;left:0;width:50%;background:var(--ink);
+transition:transform .35s var(--ease);z-index:0}
+.tabs.pos-1 .slider-bg{transform:translateX(100%)}
 
 form label{display:block;font-size:11.5px;color:var(--muted);margin:14px 0 5px;letter-spacing:.01em}
 form label:first-child{margin-top:0}
 form input{width:100%;padding:10px 11px;border:1px solid var(--line-strong);
-background:var(--paper);font-size:13.5px;color:var(--ink)}
-form input:focus{outline:none;border-color:var(--ink)}
+background:var(--paper);font-size:13.5px;color:var(--ink);transition:border-color .25s var(--ease),box-shadow .25s var(--ease)}
+form input:focus{outline:none;border-color:var(--ink);box-shadow:0 0 0 3px rgba(21,20,15,.06)}
 .hint{font-size:11px;color:var(--faint);margin-top:4px;line-height:1.4}
 
 .btn-primary{width:100%;margin-top:22px;padding:11px;background:var(--ink);color:var(--paper);
 border:1px solid var(--ink);font-size:13.5px;font-weight:500;display:flex;
-align-items:center;justify-content:center;gap:8px}
+align-items:center;justify-content:center;gap:8px;transition:background .25s var(--ease),transform .12s var(--ease)}
 .btn-primary:hover{background:#000}
+.btn-primary:active{transform:scale(.98)}
 .btn-primary:disabled{opacity:.6;cursor:default}
 .btn-secondary{padding:9px;background:none;border:1px solid var(--line-strong);
-color:var(--ink);font-size:12.5px}
+color:var(--ink);font-size:12.5px;transition:border-color .25s var(--ease),transform .12s var(--ease)}
 .btn-secondary:hover{border-color:var(--ink)}
+.btn-secondary:active{transform:scale(.98)}
 .spinner{width:12px;height:12px;border:2px solid rgba(250,248,242,.35);
 border-top-color:var(--paper);border-radius:50%;animation:spin .7s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -130,13 +151,14 @@ border-top-color:var(--paper);border-radius:50%;animation:spin .7s linear infini
 .grid{display:grid;grid-template-columns:340px 1fr;gap:22px;align-items:start}
 @media(max-width:900px){.grid{grid-template-columns:1fr}}
 
-.card{background:var(--paper2);border:1px solid var(--line-strong);padding:24px;margin-bottom:22px}
+.card{background:var(--paper2);border:1px solid var(--line-strong);padding:24px;margin-bottom:22px;
+transition:border-color .3s var(--ease)}
 .card h2{font-family:'Source Serif 4',serif;font-weight:400;font-size:19px;margin:0 0 6px}
 .card .desc{font-size:13px;color:var(--muted);line-height:1.5;margin:0 0 18px}
 
 .dropzone{border:1px dashed var(--line-strong);padding:22px;text-align:center;
-font-size:13px;color:var(--muted);cursor:pointer}
-.dropzone:hover{border-color:var(--ink);color:var(--ink)}
+font-size:13px;color:var(--muted);cursor:pointer;transition:border-color .25s var(--ease),color .25s var(--ease),background .25s var(--ease)}
+.dropzone:hover{border-color:var(--ink);color:var(--ink);background:rgba(21,20,15,.02)}
 .fname{font-family:'IBM Plex Mono',monospace;font-size:11px;margin-top:6px;color:var(--signal)}
 .skill-pill{display:inline-block;font-family:'IBM Plex Mono',monospace;font-size:10.5px;
 border:1px solid var(--line-strong);padding:3px 9px;margin:0 6px 6px 0;color:var(--muted);
@@ -167,8 +189,11 @@ background-size:200% 100%;animation:shimmer 1.3s infinite;margin-bottom:10px}
 @keyframes shimmer{to{background-position:-200% 0}}
 
 .job-card{border:1px solid var(--line-strong);border-top:none;padding:15px 16px;
-opacity:0;animation:rowIn .4s ease forwards}
+opacity:0;animation:rowIn .4s ease forwards;transition:background .25s var(--ease)}
 .job-card:first-child{border-top:1px solid var(--line-strong)}
+.job-card:hover{background:rgba(21,20,15,.025)}
+.job-card a{transition:opacity .2s var(--ease)}
+.job-card a:hover{opacity:.65}
 .job-card .row{display:flex;justify-content:space-between;align-items:flex-start;gap:14px}
 .job-card h3{font-size:14.5px;font-weight:500;margin:0}
 .job-card .meta{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);margin:4px 0 0}
@@ -201,7 +226,7 @@ background:var(--signal-bg);color:var(--signal);border:1px solid var(--signal-li
  <div class="split">
   <section class="hero">
    <div class="eyebrow"><span class="live-dot"></span>waypost · placement intelligence</div>
-   <h1>The job board that reads job boards <em>for you.</em></h1>
+   <h1 id="hero-h1"><span class="word"><span>The</span></span> <span class="word"><span>job</span></span> <span class="word"><span>board</span></span> <span class="word"><span>that</span></span> <span class="word"><span>reads</span></span> <span class="word"><span>job</span></span> <span class="word"><span>boards</span></span> <span class="word"><span><em>for</em></span></span> <span class="word"><span><em>you.</em></span></span></h1>
    <p class="hero-copy">New roles appear across the web every hour. Waypost scans them quietly, checks each one against your resume, and only tells you what's actually worth applying to.</p>
 
    <div class="scanlog">
@@ -209,22 +234,23 @@ background:var(--signal-bg);color:var(--signal);border:1px solid var(--signal-li
     <div class="scanlog-body" id="scanlog-body"></div>
    </div>
 
-   <div class="stats">
-    <div><div class="stat-number">3</div><div class="stat-label">sources tracked</div></div>
+   <div class="stats reveal" id="stats-row">
+    <div><div class="stat-number" id="stat-sources" data-target="3">0</div><div class="stat-label">sources tracked</div></div>
     <div><div class="stat-number">24/7</div><div class="stat-label">hourly scanning</div></div>
     <div><div class="stat-number">0</div><div class="stat-label">manual refreshing</div></div>
    </div>
   </section>
 
   <section class="auth-side">
-   <div class="auth-card">
+   <div class="auth-card reveal" id="auth-card">
     <div class="micro-label">private workspace</div>
     <h2>Find your next role.</h2>
     <p class="auth-sub">Sign in to see matches, or create an account to start tracking.</p>
 
-    <div class="tabs">
+    <div class="tabs" id="tabs-wrap">
      <button class="active" id="tab-login" onclick="switchTab('login')">Log in</button>
      <button id="tab-register" onclick="switchTab('register')">Create account</button>
+     <div class="slider-bg"></div>
     </div>
 
     <form id="login-form" onsubmit="return handleLogin(event)">
@@ -302,6 +328,7 @@ let token = localStorage.getItem('waypost_token') || null;
 function switchTab(tab){
   document.getElementById('tab-login').classList.toggle('active', tab==='login');
   document.getElementById('tab-register').classList.toggle('active', tab==='register');
+  document.getElementById('tabs-wrap').classList.toggle('pos-1', tab==='register');
   document.getElementById('login-form').style.display = tab==='login' ? 'block' : 'none';
   document.getElementById('register-form').style.display = tab==='register' ? 'block' : 'none';
   document.getElementById('forgot-form').style.display = tab==='forgot' ? 'block' : 'none';
@@ -510,8 +537,56 @@ if(token){
     boot.classList.add('done');
     authScreen.classList.add('ready');
     setTimeout(() => boot.remove(), 550);
+    runEntrance();
   };
   setTimeout(finish, 160 + lines.length*220 + 260);
+})();
+
+/* Premium entrance sequence, fires once the boot screen clears: the
+   headline types in word-by-word (kinetic reveal), then the stats
+   count up and the auth card rises into place. One orchestrated
+   moment rather than scattered ambient effects. */
+function runEntrance(){
+  const h1 = document.getElementById('hero-h1');
+  if(h1) h1.classList.add('in');
+
+  const statEl = document.getElementById('stat-sources');
+  setTimeout(() => {
+    const stats = document.getElementById('stats-row');
+    if(stats) stats.classList.add('in');
+    if(statEl){
+      const target = parseInt(statEl.dataset.target, 10);
+      let n = 0;
+      const step = () => {
+        n++;
+        statEl.textContent = n;
+        if(n < target) requestAnimationFrame(() => setTimeout(step, 90));
+      };
+      step();
+    }
+  }, 520);
+
+  setTimeout(() => {
+    const card = document.getElementById('auth-card');
+    if(card) card.classList.add('in');
+  }, 300);
+}
+
+/* Scroll-reveal for the dashboard - cards rise into place the first
+   time they enter the viewport, rather than all appearing at once. */
+(function(){
+  const targets = document.querySelectorAll('#dashboard .card');
+  if(!targets.length || !('IntersectionObserver' in window)) return;
+  targets.forEach(el => el.classList.add('reveal'));
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if(entry.isIntersecting){
+        entry.target.classList.add('in');
+        io.unobserve(entry.target);
+      }
+    });
+  }, {threshold:.15});
+  targets.forEach(el => io.observe(el));
 })();
 
 /* Scan log - populates the hero's signature "scan.log" panel with a
