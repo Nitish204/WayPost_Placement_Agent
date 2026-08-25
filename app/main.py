@@ -6,7 +6,8 @@ Endpoints:
   POST /resume/upload        -> upload + parse a resume (PDF/DOCX)
   POST /resume/ats-score     -> score a resume against a job description
   POST /jobs/search          -> filtered + ranked job search
-  POST /jobs/ingest          -> manually trigger a fetch cycle (also runs on schedule)
+  POST /jobs/ingest          -> manually trigger a fetch cycle (requires login, also runs on schedule)
+  POST /cron/ingest          -> trigger a fetch cycle via external cron, secret-key protected, no login
   POST /agent/chat           -> natural-language entrypoint to the full agent
 """
 import os
@@ -324,6 +325,46 @@ def trigger_ingest(
     of waiting for the next scheduled run. Requires login so this can't
     be spammed anonymously."""
     result = run_ingestion_cycle(db, search_query, search_location)
+    return result
+
+
+@app.post("/cron/ingest")
+def cron_trigger_ingest(
+    request: Request,
+    secret: str = Form(None),
+    db: Session = Depends(get_session),
+):
+    """Unauthenticated (no user login) ingest trigger for external cron
+    services (cron-job.org, GitHub Actions scheduled workflow, etc.)
+    that can't hold a user's Bearer token. Protected instead by a
+    shared secret (CRON_SECRET env var) so random requests on the
+    internet can't spam free-tier API quotas or spin up the service
+    unnecessarily.
+
+    Accepts the secret as a form field OR an X-Cron-Secret header, since
+    different cron services differ in what's easiest for them to send.
+
+    Set CRON_SECRET in Render's environment variables to any long
+    random string, then have your external cron service call:
+      POST https://<your-app>.onrender.com/cron/ingest
+      Header: X-Cron-Secret: <same value>
+    This request also serves to wake the service from sleep on
+    Render's free tier, since incoming traffic resets the idle timer.
+    """
+    expected = os.getenv("CRON_SECRET", "")
+    provided = secret or request.headers.get("X-Cron-Secret", "")
+
+    if not expected:
+        raise HTTPException(
+            503,
+            "CRON_SECRET is not configured on the server. Set it in Render's "
+            "environment variables before using this endpoint.",
+        )
+    if not provided or not secrets.compare_digest(provided, expected):
+        raise HTTPException(401, "Invalid or missing cron secret.")
+
+    result = run_ingestion_cycle(db)
+    logger.info(f"[cron] ingest triggered externally: {result}")
     return result
 
 
