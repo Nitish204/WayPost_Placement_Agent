@@ -73,13 +73,39 @@ def agent_loop(system_prompt: str, user_message: str, tool_defs: list[dict], too
     )
 
 
+def _strip_unsupported_schema_fields(schema):
+    """Gemini's function-calling schema (google.ai.generativelanguage.Schema)
+    only accepts a strict subset of JSON Schema fields and raises
+    'ValueError: Unknown field for Schema: default' (or similar) on anything
+    outside that subset - "default" being the one that bit us first, since
+    it's valid in our Anthropic-shaped tool_defs but not accepted here.
+    Recurses through nested "properties"/"items" so any tool definition,
+    current or future, is safe to pass through without hand-editing
+    agent.py's schema every time someone adds a default value."""
+    if not isinstance(schema, dict):
+        return schema
+    UNSUPPORTED_KEYS = {"default", "additionalProperties", "$schema"}
+    cleaned = {k: v for k, v in schema.items() if k not in UNSUPPORTED_KEYS}
+    if "properties" in cleaned:
+        cleaned["properties"] = {
+            k: _strip_unsupported_schema_fields(v) for k, v in cleaned["properties"].items()
+        }
+    if "items" in cleaned:
+        cleaned["items"] = _strip_unsupported_schema_fields(cleaned["items"])
+    return cleaned
+
+
 def _gemini_agent_loop(system_prompt, user_message, tool_defs, tool_impl, max_turns):
     import google.generativeai as genai
     genai.configure(api_key=GEMINI_API_KEY)
 
     gemini_tools = [{
         "function_declarations": [
-            {"name": t["name"], "description": t["description"], "parameters": t["input_schema"]}
+            {
+                "name": t["name"],
+                "description": t["description"],
+                "parameters": _strip_unsupported_schema_fields(t["input_schema"]),
+            }
             for t in tool_defs
         ]
     }]
