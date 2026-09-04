@@ -5,7 +5,7 @@ Endpoints:
   POST /profile              -> create/update a user's search profile
   POST /resume/upload        -> upload + parse a resume (PDF/DOCX)
   POST /resume/ats-score     -> score a resume against a job description
-  POST /jobs/search          -> filtered + ranked job search
+  POST /jobs/search           -> filtered + ranked job search
   POST /jobs/ingest          -> manually trigger a fetch cycle (requires login, also runs on schedule)
   POST /cron/ingest          -> trigger a fetch cycle via external cron, secret-key protected, no login
   POST /agent/chat           -> natural-language entrypoint to the full agent
@@ -264,7 +264,13 @@ async def upload_resume(
     db: Session = Depends(get_session),
 ):
     file_bytes = await file.read()
-    parsed = parse_resume(file_bytes, file.filename)
+    try:
+        parsed = parse_resume(file_bytes, file.filename)
+    except ValueError as e:
+        # parse_resume raises ValueError for unsupported file extensions -
+        # without this catch, that became an unhandled 500 instead of a
+        # clean message the frontend could actually show the user.
+        raise HTTPException(400, str(e))
 
     current_user.resume_text = parsed["raw_text"]
     current_user.resume_skills = ",".join(parsed["skills"])
