@@ -9,7 +9,7 @@ import { AgentChat } from "@/components/AgentChat";
 import { TelegramLink } from "@/components/TelegramLink";
 import { api } from "@/lib/api";
 
-type Job = { title: string; company: string; location: string; apply_url: string; score?: number };
+type Job = { title: string; company: string; location: string; apply_url: string; match_score?: number };
 type Tab = "search" | "ats" | "agent";
 
 export default function Dashboard() {
@@ -178,9 +178,9 @@ export default function Dashboard() {
                           <p className="font-bold">{job.title}</p>
                           <p className="text-sm text-muted">{job.company} · {job.location}</p>
                         </div>
-                        {job.score !== undefined && (
+                        {job.match_score !== undefined && (
                           <span className="font-mono text-sm bg-signal border-2 border-ink rounded-pill px-3 py-1">
-                            {Math.round(job.score * 100)}%
+                            {Math.round(job.match_score)}%
                           </span>
                         )}
                       </Panel>
