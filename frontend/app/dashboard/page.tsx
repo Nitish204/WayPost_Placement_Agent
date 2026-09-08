@@ -170,11 +170,11 @@ export default function Dashboard() {
                       href={job.apply_url}
                       target="_blank"
                       rel="noreferrer"
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0, transition: { delay: i * 0.04 } }}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0, transition: { delay: i * 0.08, duration: 0.5, ease: [0.16, 1, 0.3, 1] } }}
                       className="block"
                     >
-                      <Panel className="p-4 flex items-center justify-between hover:-translate-y-[1px] transition-transform">
+                      <Panel className="p-4 flex items-center justify-between hover:-translate-y-[3px] hover:scale-[1.01] transition-all duration-200">
                         <div>
                           <p className="font-bold">{job.title}</p>
                           <p className="text-sm text-muted">{job.company} · {job.location}</p>
