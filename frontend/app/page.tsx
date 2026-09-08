@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
+import { LoadingIntro } from "@/components/LoadingIntro";
 import { Badge } from "@/components/Badge";
 import { Panel, Button, Input } from "@/components/ui";
 import { ForgotPassword } from "@/components/ForgotPassword";
