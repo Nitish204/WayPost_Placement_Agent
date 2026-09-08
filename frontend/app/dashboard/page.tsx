@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
+import { LoadingIntro } from "@/components/LoadingIntro";
 import { Panel, Button, Input } from "@/components/ui";
 import { Badge } from "@/components/Badge";
 import { AtsScorePanel } from "@/components/AtsScorePanel";
