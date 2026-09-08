@@ -19,8 +19,8 @@ const scanLog = [
 // One orchestrated page-load sequence (staggered rise), not scattered
 // hover effects on every element - per the "one memorable moment" rule.
 const rise = {
-  hidden: { opacity: 0, y: 16 },
-  show: (i: number) => ({ opacity: 1, y: 0, transition: { delay: i * 0.12, duration: 0.6, ease: [0.16, 1, 0.3, 1] } }),
+  hidden: { opacity: 0, y: 32 },
+  show: (i: number) => ({ opacity: 1, y: 0, transition: { delay: 0.9 + i * 0.15, duration: 0.9, ease: [0.16, 1, 0.3, 1] } }),
 };
 
 type Mode = "login" | "register" | "forgot";
@@ -71,8 +71,9 @@ export default function LandingPage() {
     }
   }
 
-  return (
-    <main className="min-h-screen">
+return (
+  <main className="min-h-screen">
+    <LoadingIntro />
       <header className="border-b-2 border-ink flex items-center justify-between px-6 md:px-10 py-4">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 bg-signal border-2 border-ink rounded-[8px]" />
