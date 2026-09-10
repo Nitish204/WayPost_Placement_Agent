@@ -27,11 +27,11 @@ export function Button({
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary" | "secondary" }) {
   const base =
-    "font-display font-bold text-[15px] px-6 py-3 rounded-[10px] border-2 border-ink transition-transform active:translate-x-[2px] active:translate-y-[2px] active:shadow-none disabled:opacity-50 disabled:pointer-events-none";
+    "font-display font-bold text-[15px] px-6 py-3 rounded-[10px] border-2 border-ink transition-all duration-200 ease-out active:translate-x-[2px] active:translate-y-[2px] active:scale-[0.97] active:shadow-none disabled:opacity-50 disabled:pointer-events-none";
   const styles =
     variant === "primary"
-      ? "bg-signal text-ink shadow-offset hover:-translate-y-[1px] hover:shadow-offset-lg"
-      : "bg-cream text-ink shadow-offset-sm hover:-translate-y-[1px]";
+      ? "bg-signal text-ink shadow-offset hover:-translate-y-[3px] hover:scale-[1.02] hover:shadow-offset-lg"
+      : "bg-cream text-ink shadow-offset-sm hover:-translate-y-[3px] hover:scale-[1.02] hover:shadow-offset";
   return (
     <button className={`${base} ${styles} ${className}`} {...props}>
       {children}
