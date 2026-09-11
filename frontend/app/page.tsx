@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { LoadingIntro } from "@/components/LoadingIntro";
 import { Badge } from "@/components/Badge";
+import { LiveClock } from "@/components/LiveClock";
 import { Panel, Button, Input } from "@/components/ui";
 import { ForgotPassword } from "@/components/ForgotPassword";
 import { api } from "@/lib/api";
@@ -111,7 +112,7 @@ return (
           <Panel dark className="p-5 font-mono text-[13px]">
             <div className="flex justify-between text-muted pb-2 border-b border-white/10">
               <span>scan.log</span>
-              <span>21:37</span>
+              <span className="font-mono tabular-nums"><LiveClock /></span>
             </div>
             {scanLog.map((row) => (
               <div key={row.src} className="flex justify-between py-2 border-b border-white/5 last:border-0">
