@@ -37,12 +37,31 @@ def extract_text_from_docx(file_bytes: bytes) -> str:
     return "\n".join(p.text for p in document.paragraphs)
 
 
+def verify_file_signature(file_bytes: bytes, ext: str) -> bool:
+    """Checks the file's actual bytes match its claimed extension. PDF
+    files always start with the literal bytes '%PDF-'; DOCX files are
+    actually ZIP archives under the hood, always starting with the ZIP
+    signature PK\\x03\\x04. A renamed file (e.g. malware.exe -> resume.pdf)
+    would pass the old extension-only check but fails this. No extra
+    dependency needed - these are well-known, stable file signatures."""
+    if ext == ".pdf":
+        return file_bytes.startswith(b"%PDF-")
+    if ext == ".docx":
+        return file_bytes.startswith(b"PK\x03\x04")
+    return False
+
+
 def extract_resume_text(file_bytes: bytes, filename: str) -> str:
-    """Detects file type by extension and extracts plain text."""
+    """Detects file type by extension, verifies the actual file content
+    matches that extension, and extracts plain text."""
     lower = filename.lower()
     if lower.endswith(".pdf"):
+        if not verify_file_signature(file_bytes, ".pdf"):
+            raise ValueError("This file doesn't look like a real PDF. Please check the file and try again.")
         return extract_text_from_pdf(file_bytes)
     elif lower.endswith(".docx"):
+        if not verify_file_signature(file_bytes, ".docx"):
+            raise ValueError("This file doesn't look like a real DOCX. Please check the file and try again.")
         return extract_text_from_docx(file_bytes)
     else:
         raise ValueError("Unsupported resume format. Please upload a PDF or DOCX.")
