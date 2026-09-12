@@ -2,8 +2,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { LoadingIntro } from "@/components/LoadingIntro";
 import { Panel, Button, Input } from "@/components/ui";
+import { LoadingIntro } from "@/components/LoadingIntro";
 import { Badge } from "@/components/Badge";
 import { AtsScorePanel } from "@/components/AtsScorePanel";
 import { AgentChat } from "@/components/AgentChat";
@@ -80,6 +80,7 @@ export default function Dashboard() {
 
   return (
     <main className="min-h-screen pb-20">
+      <LoadingIntro />
       <header className="border-b-2 border-ink flex items-center justify-between px-6 md:px-10 py-4">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 bg-signal border-2 border-ink rounded-[8px]" />
@@ -131,10 +132,12 @@ export default function Dashboard() {
 
         {/* Main panel: tabbed search / ats / agent */}
         <div>
-          <div className="flex gap-2 mb-6 border-b-2 border-ink/10">
+          <div className="flex gap-2 mb-6 border-b-2 border-ink/10" role="tablist">
             {tabs.map((t) => (
               <button
                 key={t.id}
+                role="tab"
+                aria-selected={tab === t.id}
                 onClick={() => setTab(t.id)}
                 className={`px-4 py-2.5 text-sm font-bold border-b-2 -mb-0.5 transition-colors ${
                   tab === t.id ? "border-ink" : "border-transparent text-muted"
