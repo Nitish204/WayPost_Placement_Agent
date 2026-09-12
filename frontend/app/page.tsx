@@ -2,11 +2,11 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
-import { LoadingIntro } from "@/components/LoadingIntro";
 import { Badge } from "@/components/Badge";
-import { LiveClock } from "@/components/LiveClock";
 import { Panel, Button, Input } from "@/components/ui";
 import { ForgotPassword } from "@/components/ForgotPassword";
+import { LoadingIntro } from "@/components/LoadingIntro";
+import { LiveClock } from "@/components/LiveClock";
 import { api } from "@/lib/api";
 
 const scanLog = [
@@ -19,6 +19,9 @@ const scanLog = [
 
 // One orchestrated page-load sequence (staggered rise), not scattered
 // hover effects on every element - per the "one memorable moment" rule.
+// Bumped duration/distance up from the original (0.6s/16px) since that
+// was too subtle to reliably notice - this is deliberately larger so it
+// reads clearly as motion even competing with page-load attention.
 const rise = {
   hidden: { opacity: 0, y: 32 },
   show: (i: number) => ({ opacity: 1, y: 0, transition: { delay: 0.9 + i * 0.15, duration: 0.9, ease: [0.16, 1, 0.3, 1] } }),
@@ -72,9 +75,9 @@ export default function LandingPage() {
     }
   }
 
-return (
-  <main className="min-h-screen">
-    <LoadingIntro />
+  return (
+    <main className="min-h-screen">
+      <LoadingIntro />
       <header className="border-b-2 border-ink flex items-center justify-between px-6 md:px-10 py-4">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 bg-signal border-2 border-ink rounded-[8px]" />
@@ -158,6 +161,7 @@ return (
               <div className="flex gap-2 mb-6">
                 <button
                   onClick={() => setMode("login")}
+                  aria-pressed={mode === "login"}
                   className={`flex-1 py-2.5 rounded-[10px] border-2 border-ink font-bold text-sm transition-colors ${
                     mode === "login" ? "bg-signal" : "bg-cream"
                   }`}
@@ -166,6 +170,7 @@ return (
                 </button>
                 <button
                   onClick={() => setMode("register")}
+                  aria-pressed={mode === "register"}
                   className={`flex-1 py-2.5 rounded-[10px] border-2 border-ink font-bold text-sm transition-colors ${
                     mode === "register" ? "bg-signal" : "bg-cream"
                   }`}
