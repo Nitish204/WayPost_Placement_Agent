@@ -73,6 +73,11 @@ class UserProfile(Base):
     reset_token_expires = Column(DateTime, nullable=True)
     security_question = Column(String, nullable=True)
     security_answer_hash = Column(String, nullable=True)  # bcrypt hash, same treatment as the password itself
+    # Embedded in every JWT at issue time. Bumping this (logout-everywhere,
+    # or automatically on password reset) makes every previously issued
+    # token fail its next check instantly - no server-side token
+    # blocklist/Redis needed, just one column + one comparison per request.
+    token_version = Column(Integer, default=0, nullable=False)
     created_at = Column(DateTime, default=dt.datetime.utcnow)
 
 
