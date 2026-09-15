@@ -5,7 +5,7 @@ Endpoints:
   POST /profile              -> create/update a user's search profile
   POST /resume/upload        -> upload + parse a resume (PDF/DOCX)
   POST /resume/ats-score     -> score a resume against a job description
-  POST /jobs/search           -> filtered + ranked job search
+  POST /jobs/search          -> filtered + ranked job search
   POST /jobs/ingest          -> manually trigger a fetch cycle (requires login, also runs on schedule)
   POST /cron/ingest          -> trigger a fetch cycle via external cron, secret-key protected, no login
   POST /agent/chat           -> natural-language entrypoint to the full agent
@@ -136,7 +136,7 @@ def register(
     db.commit()
     db.refresh(profile)
 
-    token = create_access_token(profile.id, profile.email)
+    token = create_access_token(profile)
     return {
         "access_token": token, "token_type": "bearer",
         "user": {"id": profile.id, "name": profile.name, "email": profile.email},
@@ -155,7 +155,7 @@ def login(
     if not profile or not profile.hashed_password or not verify_password(password, profile.hashed_password):
         raise HTTPException(401, "Incorrect email or password.")
 
-    token = create_access_token(profile.id, profile.email)
+    token = create_access_token(profile)
     return {
         "access_token": token, "token_type": "bearer",
         "user": {"id": profile.id, "name": profile.name, "email": profile.email},
@@ -175,6 +175,21 @@ def me(current_user: UserProfile = Depends(get_current_user)):
         "telegram_linked": bool(current_user.telegram_chat_id),
         "match_score_threshold": current_user.match_score_threshold,
     }
+
+
+@app.post("/auth/logout_everywhere")
+def logout_everywhere(current_user: UserProfile = Depends(get_current_user), db: Session = Depends(get_session)):
+    """Invalidates every token issued for this account, including the
+    one used to call this endpoint. Useful if you suspect a token
+    leaked, or just want to force a clean re-login on every device.
+
+    `or 0` guards against existing rows that predate this column: the
+    generic auto-migration (_sync_schema in db.py) only ADD COLUMNs the
+    type, not a default, so a pre-existing user's token_version starts
+    as NULL/None rather than 0 - `None + 1` would otherwise crash here."""
+    current_user.token_version = (current_user.token_version or 0) + 1
+    db.commit()
+    return {"message": "Logged out on all devices. Please log in again."}
 
 
 @app.post("/auth/security-question")
@@ -215,6 +230,10 @@ def reset_with_security_answer(
         raise HTTPException(400, "That answer doesn't match our records. Please try again.")
 
     user.hashed_password = hash_password(new_password)
+    # A password reset is exactly the moment a stolen/old session should
+    # stop working. `or 0` guards the same NULL-on-existing-rows case as
+    # logout_everywhere above.
+    user.token_version = (user.token_version or 0) + 1
     db.commit()
 
     return {"message": "Password updated. You can now log in with your new password."}
