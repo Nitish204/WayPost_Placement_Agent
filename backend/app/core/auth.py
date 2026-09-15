@@ -38,9 +38,9 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
 
 
-def create_access_token(user_id: int, email: str) -> str:
+def create_access_token(user: "UserProfile") -> str:
     expire = dt.datetime.utcnow() + dt.timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    payload = {"sub": str(user_id), "email": email, "exp": expire}
+    payload = {"sub": str(user.id), "email": user.email, "tv": user.token_version or 0, "exp": expire}
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 
@@ -69,6 +69,11 @@ def get_current_user(
     user = db.query(UserProfile).filter(UserProfile.id == user_id).first()
     if not user:
         raise HTTPException(status_code=401, detail="User no longer exists. Please log in again.")
+    # A token issued before a "logout everywhere" (or a password reset,
+    # which bumps this automatically) carries the OLD token_version and
+    # gets rejected here, even though it hasn't technically expired yet.
+    if payload.get("tv") != (user.token_version or 0):
+        raise HTTPException(status_code=401, detail="Session expired. Please log in again.")
     return user
 
 
