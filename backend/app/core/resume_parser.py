@@ -24,17 +24,29 @@ SKILL_KEYWORDS = [
 
 
 def extract_text_from_pdf(file_bytes: bytes) -> str:
-    text_parts = []
-    with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
-        for page in pdf.pages:
-            page_text = page.extract_text() or ""
-            text_parts.append(page_text)
-    return "\n".join(text_parts)
+    try:
+        text_parts = []
+        with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
+            for page in pdf.pages:
+                page_text = page.extract_text() or ""
+                text_parts.append(page_text)
+        return "\n".join(text_parts)
+    except Exception as e:
+        # A file can have a genuine %PDF- header (passes the signature
+        # check) while still being structurally broken/corrupted -
+        # pdfplumber/pdfminer raise their own exception types
+        # (PDFSyntaxError etc.) for this, not ValueError, so this needs
+        # its own catch here rather than relying on the caller's
+        # ValueError handler to catch something it was never going to.
+        raise ValueError(f"Couldn't read this PDF - it may be corrupted or password-protected. ({e})")
 
 
 def extract_text_from_docx(file_bytes: bytes) -> str:
-    document = docx.Document(io.BytesIO(file_bytes))
-    return "\n".join(p.text for p in document.paragraphs)
+    try:
+        document = docx.Document(io.BytesIO(file_bytes))
+        return "\n".join(p.text for p in document.paragraphs)
+    except Exception as e:
+        raise ValueError(f"Couldn't read this DOCX - it may be corrupted. ({e})")
 
 
 def verify_file_signature(file_bytes: bytes, ext: str) -> bool:
