@@ -8,9 +8,13 @@ import { Badge } from "@/components/Badge";
 import { AtsScorePanel } from "@/components/AtsScorePanel";
 import { AgentChat } from "@/components/AgentChat";
 import { TelegramLink } from "@/components/TelegramLink";
+import { ApplyModal } from "@/components/ApplyModal";
 import { api } from "@/lib/api";
 
-type Job = { title: string; company: string; location: string; apply_url: string; match_score?: number };
+// `id` is required now that /jobs/search includes it (needed to call
+// /apply/prepare for a specific result) - optional in the type only so
+// older cached responses don't hard-crash the page during a rollout.
+type Job = { id?: number; title: string; company: string; location: string; apply_url: string; match_score?: number };
 type Tab = "search" | "ats" | "agent";
 
 export default function Dashboard() {
@@ -21,6 +25,7 @@ export default function Dashboard() {
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("search");
+  const [applyingTo, setApplyingTo] = useState<Job | null>(null);
 
   useEffect(() => {
     const t = localStorage.getItem("waypost_token");
@@ -168,27 +173,34 @@ export default function Dashboard() {
               <div className="mt-6 space-y-3">
                 <AnimatePresence>
                   {jobs.map((job, i) => (
-                    <motion.a
+                    <motion.div
                       key={job.title + job.company + i}
-                      href={job.apply_url}
-                      target="_blank"
-                      rel="noreferrer"
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0, transition: { delay: i * 0.08, duration: 0.5, ease: [0.16, 1, 0.3, 1] } }}
-                      className="block"
                     >
-                      <Panel className="p-4 flex items-center justify-between hover:-translate-y-[3px] hover:scale-[1.01] transition-all duration-200">
-                        <div>
-                          <p className="font-bold">{job.title}</p>
-                          <p className="text-sm text-muted">{job.company} · {job.location}</p>
+                      <Panel className="p-4 flex items-center justify-between gap-4 hover:-translate-y-[3px] hover:scale-[1.01] transition-all duration-200">
+                        <a href={job.apply_url} target="_blank" rel="noreferrer" className="flex-1 min-w-0">
+                          <p className="font-bold truncate">{job.title}</p>
+                          <p className="text-sm text-muted truncate">{job.company} · {job.location}</p>
+                        </a>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {job.match_score !== undefined && (
+                            <span className="font-mono text-sm bg-signal border-2 border-ink rounded-pill px-3 py-1">
+                              {Math.round(job.match_score)}%
+                            </span>
+                          )}
+                          {job.id !== undefined && (
+                            <Button
+                              variant="secondary"
+                              className="text-xs py-2 px-3.5 whitespace-nowrap"
+                              onClick={() => setApplyingTo(job as Job & { id: number })}
+                            >
+                              Auto-apply
+                            </Button>
+                          )}
                         </div>
-                        {job.match_score !== undefined && (
-                          <span className="font-mono text-sm bg-signal border-2 border-ink rounded-pill px-3 py-1">
-                            {Math.round(job.match_score)}%
-                          </span>
-                        )}
                       </Panel>
-                    </motion.a>
+                    </motion.div>
                   ))}
                 </AnimatePresence>
               </div>
@@ -200,6 +212,14 @@ export default function Dashboard() {
           {tab === "agent" && <AgentChat token={token} />}
         </div>
       </div>
+
+      {applyingTo && applyingTo.id !== undefined && (
+        <ApplyModal
+          job={applyingTo as { id: number; title: string; company: string; location: string; apply_url: string }}
+          token={token}
+          onClose={() => setApplyingTo(null)}
+        />
+      )}
     </main>
   );
 }
