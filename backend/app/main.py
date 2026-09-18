@@ -304,3 +304,309 @@ async def upload_resume(
     current_user.resume_text = parsed["raw_text"]
     current_user.resume_skills = ",".join(parsed["skills"])
     db.commit()
+
+    return {
+        "message": "Resume parsed and saved.",
+        "skills_found": parsed["skills"],
+        "estimated_experience_years": parsed["experience_years"],
+        "text_length": len(parsed["raw_text"]),
+    }
+
+
+@app.post("/resume/ats-score")
+async def ats_score(
+    job_description: str = Form(...),
+    resume_text: str = Form(None),
+    current_user: UserProfile = Depends(get_current_user),
+):
+    if not resume_text:
+        resume_text = current_user.resume_text
+    if not resume_text:
+        raise HTTPException(400, "Provide resume_text directly, or upload a resume first via /resume/upload.")
+
+    return compute_ats_score(resume_text, job_description)
+
+
+@app.post("/jobs/search")
+def search_jobs(
+    job_titles: str = Form(..., description="Comma separated"),
+    locations: str = Form(..., description="Comma separated"),
+    top_k: int = Form(20),
+    current_user: UserProfile = Depends(get_current_user),
+    db: Session = Depends(get_session),
+):
+    all_jobs = db.query(Job).filter(Job.is_active == True).all()  # noqa: E712
+    # `id` is included so the frontend can call /apply/prepare for a
+    # specific result without a second lookup - it wasn't needed before
+    # this endpoint's only consumer was "open apply_url in a new tab".
+    job_dicts = [
+        {"id": j.id, "title": j.title, "company": j.company, "location": j.location,
+         "description": j.description, "apply_url": j.apply_url, "source": j.source}
+        for j in all_jobs
+    ]
+
+    titles_list = [t.strip() for t in job_titles.split(",")]
+    locations_list = [l.strip() for l in locations.split(",")]
+
+    matches = find_matches(job_dicts, titles_list, locations_list, current_user.resume_text or "", top_k=top_k)
+    return {"count": len(matches), "jobs": matches}
+
+
+@app.post("/jobs/ingest")
+def trigger_ingest(
+    search_query: str = Form(""),
+    search_location: str = Form(""),
+    current_user: UserProfile = Depends(get_current_user),
+    db: Session = Depends(get_session),
+):
+    """Manually triggers one fetch-and-store cycle immediately, instead
+    of waiting for the next scheduled run. Requires login so this can't
+    be spammed anonymously."""
+    result = run_ingestion_cycle(db, search_query, search_location)
+    return result
+
+
+@app.post("/cron/ingest")
+def cron_trigger_ingest(
+    request: Request,
+    secret: str = Form(None),
+    db: Session = Depends(get_session),
+):
+    """Unauthenticated (no user login) ingest trigger for external cron
+    services (cron-job.org, GitHub Actions scheduled workflow, etc.)
+    that can't hold a user's Bearer token. Protected instead by a
+    shared secret (CRON_SECRET env var) so random requests on the
+    internet can't spam free-tier API quotas or spin up the service
+    unnecessarily.
+
+    Accepts the secret as a form field OR an X-Cron-Secret header, since
+    different cron services differ in what's easiest for them to send.
+
+    Set CRON_SECRET in Render's environment variables to any long
+    random string, then have your external cron service call:
+      POST https://<your-app>.onrender.com/cron/ingest
+      Header: X-Cron-Secret: <same value>
+    This request also serves to wake the service from sleep on
+    Render's free tier, since incoming traffic resets the idle timer.
+    """
+    expected = os.getenv("CRON_SECRET", "")
+    provided = secret or request.headers.get("X-Cron-Secret", "")
+
+    if not expected:
+        raise HTTPException(
+            503,
+            "CRON_SECRET is not configured on the server. Set it in Render's "
+            "environment variables before using this endpoint.",
+        )
+    if not provided or not secrets.compare_digest(provided, expected):
+        raise HTTPException(401, "Invalid or missing cron secret.")
+
+    result = run_ingestion_cycle(db)
+    logger.info(f"[cron] ingest triggered externally: {result}")
+    return result
+
+
+@app.post("/agent/chat")
+def agent_chat(
+    message: str = Form(...),
+    current_user: UserProfile = Depends(get_current_user),
+):
+    """Natural language entrypoint - e.g. 'Find me remote data analyst
+    internships in India and check my resume against the top one.'"""
+    reply = run_agent(message, resume_text=current_user.resume_text or "")
+    return {"reply": reply}
+
+
+@app.get("/admin/board-health")
+def board_health(current_user: UserProfile = Depends(get_current_user)):
+    """Checks every currently-configured Greenhouse/Lever/Ashby board
+    token against its real endpoint and reports which ones are dead.
+
+    Requires login (not a public/cron-style secret-key endpoint like
+    /cron/ingest) since this is a diagnostic for whoever's running the
+    app, not something external automation needs to call - and it's
+    cheap enough (a handful of short-timeout GETs) that ordinary login
+    protection is enough, no separate rate limit needed."""
+    boards = resolve_boards()
+    return validate_boards(boards)
+
+
+@app.post("/apply/prepare")
+def apply_prepare(
+    job_id: int = Form(...),
+    phone: str = Form(None),
+    cover_note: str = Form(None),
+    current_user: UserProfile = Depends(get_current_user),
+    db: Session = Depends(get_session),
+):
+    """Stage 1 of auto-apply: loads the job's REAL apply_url in a
+    headless browser, fills whatever fields it recognizes (name/email/
+    phone/cover letter) using the current user's profile, and returns a
+    screenshot for review. Does NOT submit anything - see apply_agent.py.
+
+    Idempotent per (user, job): re-calling this for a job that already
+    has an application row returns the existing row's current state
+    instead of launching a second browser session and creating a
+    duplicate pending_approval entry."""
+    job = db.query(Job).filter(Job.id == job_id).first()
+    if not job:
+        raise HTTPException(404, "Job not found.")
+    if not job.apply_url:
+        raise HTTPException(400, "This job posting has no apply link to fill.")
+
+    idempotency_key = hashlib.sha256(f"{current_user.id}:{job_id}".encode()).hexdigest()
+    existing = db.query(Application).filter(Application.idempotency_key == idempotency_key).first()
+    if existing:
+        return _serialize_application(existing, job)
+
+    candidate = {
+        "name": current_user.name,
+        "email": current_user.email,
+        "phone": phone or "",
+        "cover_note": cover_note or "",
+    }
+    result = prepare_application(job.apply_url, candidate)
+
+    application = Application(
+        user_id=current_user.id,
+        job_id=job.id,
+        idempotency_key=idempotency_key,
+        status="pending_approval" if result["ok"] else "failed",
+        phone=phone,
+        cover_note=cover_note,
+        filled_fields=json.dumps(result.get("filled_fields", [])),
+        preview_screenshot_b64=result.get("screenshot_b64"),
+        error_message=None if result["ok"] else result.get("reason"),
+    )
+    db.add(application)
+    db.commit()
+    db.refresh(application)
+
+    return _serialize_application(application, job)
+
+
+@app.post("/apply/{application_id}/confirm")
+def apply_confirm(
+    application_id: int,
+    current_user: UserProfile = Depends(get_current_user),
+    db: Session = Depends(get_session),
+):
+    """Stage 2 of auto-apply - the human approval gate. Only an
+    application currently in 'pending_approval' (i.e. successfully
+    previewed, not yet acted on) can be confirmed. This is the only
+    code path in the whole app that leads to apply_agent.confirm_submit()
+    - there is no way to reach a real form submission without a human
+    having called this endpoint on a specific, already-previewed row."""
+    application = db.query(Application).filter(
+        Application.id == application_id, Application.user_id == current_user.id
+    ).first()
+    if not application:
+        raise HTTPException(404, "Application not found.")
+    if application.status != "pending_approval":
+        raise HTTPException(400, f"Application is '{application.status}', not awaiting approval.")
+
+    job = db.query(Job).filter(Job.id == application.job_id).first()
+    if not job:
+        raise HTTPException(404, "The job for this application no longer exists.")
+
+    candidate = {
+        "name": current_user.name,
+        "email": current_user.email,
+        "phone": application.phone or "",
+        "cover_note": application.cover_note or "",
+    }
+    result = confirm_submit(job.apply_url, candidate)
+    application.decided_at = dt.datetime.utcnow()
+    if result["ok"]:
+        application.status = "submitted"
+        application.submitted_at = dt.datetime.utcnow()
+        application.confirmation_screenshot_b64 = result.get("confirmation_b64")
+    else:
+        application.status = "failed"
+        application.error_message = result.get("reason")
+    db.commit()
+    db.refresh(application)
+
+    return _serialize_application(application, job)
+
+
+@app.post("/apply/{application_id}/reject")
+def apply_reject(
+    application_id: int,
+    current_user: UserProfile = Depends(get_current_user),
+    db: Session = Depends(get_session),
+):
+    """Human declines a previewed application. Nothing was ever
+    submitted for a rejected row - the browser agent only filled and
+    screenshotted the form during /apply/prepare."""
+    application = db.query(Application).filter(
+        Application.id == application_id, Application.user_id == current_user.id
+    ).first()
+    if not application:
+        raise HTTPException(404, "Application not found.")
+    if application.status != "pending_approval":
+        raise HTTPException(400, f"Application is '{application.status}', not awaiting approval.")
+
+    application.status = "rejected"
+    application.decided_at = dt.datetime.utcnow()
+    db.commit()
+    return {"message": "Application discarded. Nothing was submitted."}
+
+
+@app.get("/applications")
+def list_applications(
+    current_user: UserProfile = Depends(get_current_user),
+    db: Session = Depends(get_session),
+):
+    applications = db.query(Application).filter(
+        Application.user_id == current_user.id
+    ).order_by(Application.created_at.desc()).all()
+
+    results = []
+    for a in applications:
+        job = db.query(Job).filter(Job.id == a.job_id).first()
+        results.append(_serialize_application(a, job))
+    return {"count": len(results), "applications": results}
+
+
+def _serialize_application(a: Application, job: Job | None) -> dict:
+    """Shared shape for apply_prepare/apply_confirm/list_applications
+    responses, so the frontend has one consistent structure to render
+    regardless of which endpoint returned it."""
+    return {
+        "id": a.id,
+        "status": a.status,
+        "job": {
+            "id": job.id, "title": job.title, "company": job.company,
+            "location": job.location, "apply_url": job.apply_url,
+        } if job else None,
+        "filled_fields": json.loads(a.filled_fields or "[]"),
+        "preview_screenshot_b64": a.preview_screenshot_b64,
+        "confirmation_screenshot_b64": a.confirmation_screenshot_b64,
+        "error_message": a.error_message,
+        "created_at": a.created_at.isoformat() if a.created_at else None,
+        "submitted_at": a.submitted_at.isoformat() if a.submitted_at else None,
+    }
+
+
+@app.post("/jobs/seed-sample")
+def seed_sample(
+    current_user: UserProfile = Depends(get_current_user),
+    db: Session = Depends(get_session),
+):
+    """Loads a small set of sample jobs from app/data/sample_jobs.json
+    into the pool. Use this to test search/matching/notifications right
+    after setup, before configuring real GREENHOUSE_BOARDS/LEVER_BOARDS/
+    ADZUNA keys - no external calls, no API keys required."""
+    return seed_sample_jobs(db)
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+
+# Serve the static frontend (login/dashboard) at the root. Mounted last
+# so it doesn't shadow the API routes above.
+if os.path.isdir("app/static"):
+    app.mount("/", StaticFiles(directory="app/static", html=True), name="static")
