@@ -60,4 +60,28 @@ export const api = {
   seedSample: (token: string) => postForm("/jobs/seed-sample", {}, token),
 
   agentChat: (message: string, token: string) => postForm("/agent/chat", { message }, token),
+
+  // job_id here must be the real numeric Job row id - /jobs/search now
+  // includes it directly in each result (see backend/app/main.py), so
+  // callers pass job.id straight through.
+  applyPrepare: (job_id: number, token: string, phone?: string, cover_note?: string) =>
+    postForm("/apply/prepare", { job_id, phone, cover_note }, token),
+
+  applyConfirm: (applicationId: number, token: string) =>
+    postForm(`/apply/${applicationId}/confirm`, {}, token),
+
+  applyReject: (applicationId: number, token: string) =>
+    postForm(`/apply/${applicationId}/reject`, {}, token),
+
+  listApplications: async (token: string) => {
+    const res = await fetch(BASE + "/applications", { headers: authHeaders(token) });
+    if (!res.ok) throw new Error("Could not load applications");
+    return res.json();
+  },
+
+  boardHealth: async (token: string) => {
+    const res = await fetch(BASE + "/admin/board-health", { headers: authHeaders(token) });
+    if (!res.ok) throw new Error("Could not check board health");
+    return res.json();
+  },
 };
