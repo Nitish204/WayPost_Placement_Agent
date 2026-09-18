@@ -38,36 +38,53 @@ def _fallback_boards() -> dict:
         return {"greenhouse": [], "lever": [], "ashby": []}
 
 
-def fetch_all_raw_jobs(search_query: str = "", search_location: str = "") -> list[dict]:
-    """Pulls from every configured source. Each source function is
-    independently fault-tolerant (returns [] on failure) so one bad
-    source never blocks the others."""
-    all_jobs = []
+def resolve_boards() -> dict:
+    """Resolves the actual board-token list per source: env var if set
+    (GREENHOUSE_BOARDS/LEVER_BOARDS/ASHBY_BOARDS), else the curated
+    fallback from data/companies.json. Pulled out of fetch_all_raw_jobs
+    so board_validator.py can check the exact same tokens ingestion
+    will actually use - validating a list that isn't what's really
+    configured would be worse than not validating at all."""
     fallback = _fallback_boards()
+    resolved = {}
 
     gh_boards = [b for b in os.getenv("GREENHOUSE_BOARDS", "").split(",") if b.strip()]
     if not gh_boards:
         gh_boards = fallback["greenhouse"]
         if gh_boards:
             logger.info(f"[ingest] GREENHOUSE_BOARDS not set, using fallback list: {gh_boards}")
-    if gh_boards:
-        all_jobs.extend(greenhouse.fetch_multiple(gh_boards))
+    resolved["greenhouse"] = gh_boards
 
     lever_boards = [b for b in os.getenv("LEVER_BOARDS", "").split(",") if b.strip()]
     if not lever_boards:
         lever_boards = fallback["lever"]
         if lever_boards:
             logger.info(f"[ingest] LEVER_BOARDS not set, using fallback list: {lever_boards}")
-    if lever_boards:
-        all_jobs.extend(lever.fetch_multiple(lever_boards))
+    resolved["lever"] = lever_boards
 
     ashby_boards = [b for b in os.getenv("ASHBY_BOARDS", "").split(",") if b.strip()]
     if not ashby_boards:
         ashby_boards = fallback["ashby"]
         if ashby_boards:
             logger.info(f"[ingest] ASHBY_BOARDS not set, using fallback list: {ashby_boards}")
-    if ashby_boards:
-        all_jobs.extend(ashby.fetch_multiple(ashby_boards))
+    resolved["ashby"] = ashby_boards
+
+    return resolved
+
+
+def fetch_all_raw_jobs(search_query: str = "", search_location: str = "") -> list[dict]:
+    """Pulls from every configured source. Each source function is
+    independently fault-tolerant (returns [] on failure) so one bad
+    source never blocks the others."""
+    all_jobs = []
+    boards = resolve_boards()
+
+    if boards["greenhouse"]:
+        all_jobs.extend(greenhouse.fetch_multiple(boards["greenhouse"]))
+    if boards["lever"]:
+        all_jobs.extend(lever.fetch_multiple(boards["lever"]))
+    if boards["ashby"]:
+        all_jobs.extend(ashby.fetch_multiple(boards["ashby"]))
 
     if search_query:
         all_jobs.extend(adzuna.fetch_jobs(query=search_query, location=search_location))
