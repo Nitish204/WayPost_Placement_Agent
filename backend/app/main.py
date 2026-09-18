@@ -9,10 +9,18 @@ Endpoints:
   POST /jobs/ingest          -> manually trigger a fetch cycle (requires login, also runs on schedule)
   POST /cron/ingest          -> trigger a fetch cycle via external cron, secret-key protected, no login
   POST /agent/chat           -> natural-language entrypoint to the full agent
+  GET  /admin/board-health   -> checks each configured Greenhouse/Lever/Ashby token is still live
+  POST /apply/prepare        -> fills a job's real apply form via browser agent, returns a preview (does NOT submit)
+  POST /apply/{id}/confirm   -> submits a previously previewed + human-approved application
+  POST /apply/{id}/reject    -> discards a previewed application without submitting
+  GET  /applications         -> lists the current user's application attempts + statuses
 """
 import os
+import json
+import hashlib
 import secrets
 import logging
+import datetime as dt
 from fastapi import FastAPI, UploadFile, File, Form, Depends, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -25,11 +33,13 @@ from slowapi.middleware import SlowAPIMiddleware
 
 load_dotenv()
 
-from app.db import init_db, get_session, Job, UserProfile
+from app.db import init_db, get_session, Job, UserProfile, Application
 from app.core.resume_parser import parse_resume
 from app.core.ats_scorer import compute_ats_score
 from app.core.matcher import find_matches
-from app.core.ingest import run_ingestion_cycle, seed_sample_jobs
+from app.core.ingest import run_ingestion_cycle, seed_sample_jobs, resolve_boards
+from app.core.board_validator import validate_boards
+from app.core.apply_agent import prepare_application, confirm_submit
 from app.core.auth import (
     hash_password, verify_password, create_access_token, get_current_user,
     hash_security_answer, verify_security_answer,
@@ -294,134 +304,3 @@ async def upload_resume(
     current_user.resume_text = parsed["raw_text"]
     current_user.resume_skills = ",".join(parsed["skills"])
     db.commit()
-
-    return {
-        "message": "Resume parsed and saved.",
-        "skills_found": parsed["skills"],
-        "estimated_experience_years": parsed["experience_years"],
-        "text_length": len(parsed["raw_text"]),
-    }
-
-
-@app.post("/resume/ats-score")
-async def ats_score(
-    job_description: str = Form(...),
-    resume_text: str = Form(None),
-    current_user: UserProfile = Depends(get_current_user),
-):
-    if not resume_text:
-        resume_text = current_user.resume_text
-    if not resume_text:
-        raise HTTPException(400, "Provide resume_text directly, or upload a resume first via /resume/upload.")
-
-    return compute_ats_score(resume_text, job_description)
-
-
-@app.post("/jobs/search")
-def search_jobs(
-    job_titles: str = Form(..., description="Comma separated"),
-    locations: str = Form(..., description="Comma separated"),
-    top_k: int = Form(20),
-    current_user: UserProfile = Depends(get_current_user),
-    db: Session = Depends(get_session),
-):
-    all_jobs = db.query(Job).filter(Job.is_active == True).all()  # noqa: E712
-    job_dicts = [
-        {"title": j.title, "company": j.company, "location": j.location,
-         "description": j.description, "apply_url": j.apply_url, "source": j.source}
-        for j in all_jobs
-    ]
-
-    titles_list = [t.strip() for t in job_titles.split(",")]
-    locations_list = [l.strip() for l in locations.split(",")]
-
-    matches = find_matches(job_dicts, titles_list, locations_list, current_user.resume_text or "", top_k=top_k)
-    return {"count": len(matches), "jobs": matches}
-
-
-@app.post("/jobs/ingest")
-def trigger_ingest(
-    search_query: str = Form(""),
-    search_location: str = Form(""),
-    current_user: UserProfile = Depends(get_current_user),
-    db: Session = Depends(get_session),
-):
-    """Manually triggers one fetch-and-store cycle immediately, instead
-    of waiting for the next scheduled run. Requires login so this can't
-    be spammed anonymously."""
-    result = run_ingestion_cycle(db, search_query, search_location)
-    return result
-
-
-@app.post("/cron/ingest")
-def cron_trigger_ingest(
-    request: Request,
-    secret: str = Form(None),
-    db: Session = Depends(get_session),
-):
-    """Unauthenticated (no user login) ingest trigger for external cron
-    services (cron-job.org, GitHub Actions scheduled workflow, etc.)
-    that can't hold a user's Bearer token. Protected instead by a
-    shared secret (CRON_SECRET env var) so random requests on the
-    internet can't spam free-tier API quotas or spin up the service
-    unnecessarily.
-
-    Accepts the secret as a form field OR an X-Cron-Secret header, since
-    different cron services differ in what's easiest for them to send.
-
-    Set CRON_SECRET in Render's environment variables to any long
-    random string, then have your external cron service call:
-      POST https://<your-app>.onrender.com/cron/ingest
-      Header: X-Cron-Secret: <same value>
-    This request also serves to wake the service from sleep on
-    Render's free tier, since incoming traffic resets the idle timer.
-    """
-    expected = os.getenv("CRON_SECRET", "")
-    provided = secret or request.headers.get("X-Cron-Secret", "")
-
-    if not expected:
-        raise HTTPException(
-            503,
-            "CRON_SECRET is not configured on the server. Set it in Render's "
-            "environment variables before using this endpoint.",
-        )
-    if not provided or not secrets.compare_digest(provided, expected):
-        raise HTTPException(401, "Invalid or missing cron secret.")
-
-    result = run_ingestion_cycle(db)
-    logger.info(f"[cron] ingest triggered externally: {result}")
-    return result
-
-
-@app.post("/agent/chat")
-def agent_chat(
-    message: str = Form(...),
-    current_user: UserProfile = Depends(get_current_user),
-):
-    """Natural language entrypoint - e.g. 'Find me remote data analyst
-    internships in India and check my resume against the top one.'"""
-    reply = run_agent(message, resume_text=current_user.resume_text or "")
-    return {"reply": reply}
-
-
-@app.post("/jobs/seed-sample")
-def seed_sample(
-    current_user: UserProfile = Depends(get_current_user),
-    db: Session = Depends(get_session),
-):
-    """Loads a small set of sample jobs from app/data/sample_jobs.json
-    into the pool. Use this to test search/matching/notifications right
-    after setup, before configuring real GREENHOUSE_BOARDS/LEVER_BOARDS/
-    ADZUNA keys - no external calls, no API keys required."""
-    return seed_sample_jobs(db)
-
-
-@app.get("/health")
-def health():
-    return {"status": "ok"}
-
-
-# Serve the static frontend (login/dashboard) at the root. Mounted last
-# so it doesn't shadow the API routes above.
-if os.path.isdir("app/static"):
-    app.mount("/", StaticFiles(directory="app/static", html=True), name="static")
