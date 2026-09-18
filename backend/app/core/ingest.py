@@ -95,9 +95,25 @@ def fetch_all_raw_jobs(search_query: str = "", search_location: str = "") -> lis
 
 def store_jobs(db: Session, raw_jobs: list[dict]) -> dict:
     """Inserts new jobs, skips duplicates (by hash), marks a fetch
-    timestamp. Returns counts for observability/logging."""
+    timestamp. Returns counts for observability/logging.
+
+    Tracks `seen_hashes` for THIS batch, in addition to the DB-side
+    exists check. That in-batch tracking is required, not optional:
+    the session is configured with autoflush=False (see db.py), so a
+    query issued mid-loop cannot see rows added earlier in the same
+    loop that haven't been flushed/committed yet. A source can list the
+    same posting twice under different IDs within one fetch (observed
+    in production: Greenhouse returning the same Stripe role twice
+    under two different gh_jid values, same title/company/location so
+    the same hash) - without this local set, both duplicates pass the
+    DB-side check (neither is committed yet), both get staged, and the
+    final bulk INSERT fails on the unique constraint - which silently
+    drops the ENTIRE batch (all ~1500 jobs that run), not just the
+    duplicate pair, since it's one multi-row INSERT statement.
+    """
     new_count = 0
     skipped_count = 0
+    seen_hashes: set[str] = set()
 
     for j in raw_jobs:
         title = j.get("title", "").strip()
@@ -108,8 +124,13 @@ def store_jobs(db: Session, raw_jobs: list[dict]) -> dict:
             continue
 
         job_hash = make_job_hash(title, company, location)
+        if job_hash in seen_hashes:
+            skipped_count += 1
+            continue
+
         exists = db.query(Job).filter(Job.job_hash == job_hash).first()
         if exists:
+            seen_hashes.add(job_hash)
             skipped_count += 1
             continue
 
@@ -126,6 +147,7 @@ def store_jobs(db: Session, raw_jobs: list[dict]) -> dict:
             is_active=True,
         )
         db.add(db_job)
+        seen_hashes.add(job_hash)
         new_count += 1
 
     db.commit()
