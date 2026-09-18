@@ -10,6 +10,7 @@ Celery beat + workers, or a serverless cron (e.g. AWS EventBridge ->
 Lambda) so ingestion doesn't compete with API request handling.
 """
 import logging
+import datetime as dt
 from apscheduler.schedulers.background import BackgroundScheduler
 
 from app.db import SessionLocal, UserProfile
@@ -56,17 +57,30 @@ def scheduled_ingestion_job():
 
 
 def start_scheduler(interval_minutes: int = 60):
-    """Starts the background scheduler. Call once at app startup."""
+    """Starts the background scheduler. Call once at app startup.
+
+    next_run_time is set to "now" (instead of None) so the very first
+    ingestion cycle fires immediately in the background as soon as the
+    scheduler starts, rather than waiting a full interval_minutes before
+    the job pool has anything in it. This was the direct cause of a
+    fresh install/deploy showing an empty pool for up to an hour -
+    which is exactly the gap the "Load sample jobs" button was being
+    used to paper over. Every subsequent run still follows the normal
+    interval schedule from this first run.
+
+    This runs in APScheduler's own background thread, so it does not
+    block app startup or the first incoming request.
+    """
     scheduler.add_job(
         scheduled_ingestion_job,
         "interval",
         minutes=interval_minutes,
         id="job_ingestion",
         replace_existing=True,
-        next_run_time=None,  # will run after the first interval; call once manually at startup if you want immediate results
+        next_run_time=dt.datetime.now(),
     )
     scheduler.start()
-    logger.info(f"[scheduler] started - polling every {interval_minutes} minutes")
+    logger.info(f"[scheduler] started - immediate ingestion queued, then polling every {interval_minutes} minutes")
 
 
 def stop_scheduler():
