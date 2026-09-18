@@ -81,6 +81,43 @@ class UserProfile(Base):
     created_at = Column(DateTime, default=dt.datetime.utcnow)
 
 
+class Application(Base):
+    """One row per attempted auto-apply. Deliberately splits into two
+    stages via `status` rather than applying in one step:
+
+      pending_approval -> the browser agent has filled the real apply
+        form and screenshotted it, but has NOT clicked submit.
+      approved + submitted -> a human reviewed the screenshot and
+        confirmed; the agent re-filled the form and actually clicked submit.
+      rejected -> a human reviewed and declined; nothing was ever submitted.
+      failed -> either stage raised (bad selector match, site changed,
+        network error); see error_message.
+
+    idempotency_key is unique per (user, job) so re-clicking "Apply" on
+    a job that already has a row in flight returns the existing row
+    instead of spinning up a second browser session / risking a double
+    submission for the same posting.
+    """
+    __tablename__ = "applications"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, index=True)
+    job_id = Column(Integer, index=True)
+    idempotency_key = Column(String, unique=True, index=True)
+
+    status = Column(String, default="pending_approval")  # pending_approval/approved/rejected/submitted/failed
+    phone = Column(String, nullable=True)              # captured at prepare time, reused verbatim at confirm time
+    cover_note = Column(Text, nullable=True)            # so submit fills the exact form the human approved
+    filled_fields = Column(Text, nullable=True)     # JSON string: [{"field": "email", "label": "..."}]
+    preview_screenshot_b64 = Column(Text, nullable=True)
+    confirmation_screenshot_b64 = Column(Text, nullable=True)
+    error_message = Column(Text, nullable=True)
+
+    created_at = Column(DateTime, default=dt.datetime.utcnow)
+    decided_at = Column(DateTime, nullable=True)     # when a human approved/rejected
+    submitted_at = Column(DateTime, nullable=True)    # when confirm_submit actually ran
+
+
 class MatchResult(Base):
     """Cached match score between a user and a job, so we don't recompute
     every time and so we can detect + notify about NEW high matches."""
