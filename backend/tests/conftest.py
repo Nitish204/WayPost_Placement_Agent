@@ -11,6 +11,13 @@ os.environ.setdefault("JWT_SECRET_KEY", "test-secret-for-pytest")
 os.environ.setdefault("ALLOWED_ORIGINS", "http://localhost:3000")
 os.environ.setdefault("GEMINI_API_KEY", "dummy-key-not-used-in-these-tests")
 os.environ.setdefault("DATABASE_URL", "sqlite:///./_pytest_waypost.db")
+# Without this, every test's `client` fixture (which uses TestClient as
+# a context manager, firing the real startup event) would kick off the
+# real scheduler - real network calls to Greenhouse/Lever/Ashby, real
+# board-health checks - in a background thread that outlives the test
+# and races against the per-test Base.metadata.drop_all/create_all
+# below. See app/main.py's on_startup() for the corresponding check.
+os.environ.setdefault("DISABLE_SCHEDULER", "1")
 
 from fastapi.testclient import TestClient
 from app.main import app
