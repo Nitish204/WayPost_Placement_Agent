@@ -15,10 +15,13 @@ becomes something you can check on demand (or see at startup) instead
 of something you'd only discover by noticing a company's jobs quietly
 stopped appearing.
 """
+import os
 import logging
+import datetime as dt
 import requests
 
 from app.sources import greenhouse, lever, ashby
+from app.core.notifier import send_telegram
 
 logger = logging.getLogger(__name__)
 
@@ -92,3 +95,72 @@ def validate_boards(boards: dict) -> dict:
                 stale.append(f"{source}:{token}")
                 logger.warning(f"[board_validator] STALE token - {source}:{token} did not resolve")
     return {"results": results, "stale": stale}
+
+
+def check_and_alert_boards(db) -> dict:
+    """The periodic, state-aware version of validate_boards(). Called
+    on a schedule (see scheduler.py) rather than only on-demand via
+    GET /admin/board-health, so a token going stale gets surfaced
+    automatically instead of depending on someone remembering to check.
+
+    Persists each token's live/dead state in BoardTokenStatus so an
+    alert only fires on the LIVE -> DEAD transition, not on every check
+    while it stays dead - a token that's been broken for a week
+    shouldn't re-page anyone every cycle. Recovery (DEAD -> LIVE) is
+    logged quietly, not alerted - good news doesn't need to interrupt
+    anyone.
+
+    Alerting itself goes to ADMIN_TELEGRAM_CHAT_ID via the existing
+    Telegram notifier (see notifier.py) if that env var is set; either
+    way, every newly-stale token is always logged at ERROR level so
+    it's visible in Render's logs even with no Telegram configured -
+    the alert is a convenience on top of that, not a replacement for it.
+    """
+    from app.db import BoardTokenStatus
+    from app.core.ingest import resolve_boards
+
+    boards = resolve_boards()
+    result = validate_boards(boards)
+
+    newly_stale = []
+    newly_recovered = []
+    now = dt.datetime.utcnow()
+
+    for source, token_results in result["results"].items():
+        for token, is_live in token_results.items():
+            key = f"{source}:{token}"
+            row = db.query(BoardTokenStatus).filter(BoardTokenStatus.source_token_key == key).first()
+
+            was_live = row.is_live if row else True  # first-ever check: no prior alert to suppress
+
+            if row is None:
+                row = BoardTokenStatus(source=source, token=token, source_token_key=key)
+                db.add(row)
+
+            row.is_live = is_live
+            row.last_checked_at = now
+
+            if was_live and not is_live:
+                newly_stale.append(key)
+                row.last_alerted_at = now
+            elif not was_live and is_live:
+                newly_recovered.append(key)
+
+    db.commit()
+
+    if newly_stale:
+        message = (
+            f"⚠️ {len(newly_stale)} job board token(s) went stale:\n"
+            + "\n".join(f"- {k}" for k in newly_stale)
+            + "\nThey likely need removing from data/companies.json (or GREENHOUSE_BOARDS/"
+              "LEVER_BOARDS/ASHBY_BOARDS) if the company migrated ATS providers."
+        )
+        logger.error(f"[board_validator] {message}")
+        admin_chat_id = os.getenv("ADMIN_TELEGRAM_CHAT_ID", "")
+        if admin_chat_id:
+            send_telegram(admin_chat_id, message)
+
+    if newly_recovered:
+        logger.info(f"[board_validator] recovered: {newly_recovered}")
+
+    return {"newly_stale": newly_stale, "newly_recovered": newly_recovered, "checked": result}
