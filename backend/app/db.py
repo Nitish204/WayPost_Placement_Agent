@@ -118,6 +118,26 @@ class Application(Base):
     submitted_at = Column(DateTime, nullable=True)    # when confirm_submit actually ran
 
 
+class BoardTokenStatus(Base):
+    """Tracks the last-known live/dead state of each Greenhouse/Lever/
+    Ashby board token, so the periodic health check (see
+    board_validator.check_and_alert_boards) can tell a NEW failure
+    apart from one it already alerted on. Without this, a token that's
+    been dead for a week would re-trigger a fresh alert every single
+    check cycle - this table is what makes the alert fire once on the
+    live->dead transition and then go quiet until either it recovers
+    or someone updates the board list."""
+    __tablename__ = "board_token_status"
+
+    id = Column(Integer, primary_key=True, index=True)
+    source = Column(String, index=True)   # greenhouse / lever / ashby
+    token = Column(String, index=True)
+    source_token_key = Column(String, unique=True, index=True)  # f"{source}:{token}", dedup key
+    is_live = Column(Boolean, default=True)
+    last_checked_at = Column(DateTime, default=dt.datetime.utcnow)
+    last_alerted_at = Column(DateTime, nullable=True)  # None until the first stale alert fires
+
+
 class MatchResult(Base):
     """Cached match score between a user and a job, so we don't recompute
     every time and so we can detect + notify about NEW high matches."""
