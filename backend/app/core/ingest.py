@@ -72,10 +72,17 @@ def resolve_boards() -> dict:
     return resolved
 
 
-def fetch_all_raw_jobs(search_query: str = "", search_location: str = "") -> list[dict]:
-    """Pulls from every configured source. Each source function is
-    independently fault-tolerant (returns [] on failure) so one bad
-    source never blocks the others."""
+def fetch_board_jobs() -> list[dict]:
+    """Pulls from Greenhouse/Lever/Ashby only. These sources aren't
+    filtered by search query or location at the API level - a board
+    token always returns that company's ENTIRE board, identical every
+    time regardless of what a user searched for. Split out from
+    fetch_all_raw_jobs so the scheduler can call this exactly once per
+    cycle, instead of once per (title, location) combo - production
+    logs showed the same ~1500-job Greenhouse/Lever/Ashby fetch
+    repeated 3 times in a single cycle (once per combo), which is pure
+    redundant load on those APIs and their rate limits for zero
+    additional data."""
     all_jobs = []
     boards = resolve_boards()
 
@@ -86,9 +93,31 @@ def fetch_all_raw_jobs(search_query: str = "", search_location: str = "") -> lis
     if boards["ashby"]:
         all_jobs.extend(ashby.fetch_multiple(boards["ashby"]))
 
-    if search_query:
-        all_jobs.extend(adzuna.fetch_jobs(query=search_query, location=search_location))
+    logger.info(f"[ingest] fetched {len(all_jobs)} raw jobs from board sources (greenhouse/lever/ashby)")
+    return all_jobs
 
+
+def fetch_adzuna_jobs(search_query: str, search_location: str = "") -> list[dict]:
+    """Pulls from Adzuna only - the one source that IS genuinely
+    parameterized by query/location, so unlike the board sources it
+    legitimately needs a separate fetch per distinct combo."""
+    if not search_query:
+        return []
+    jobs = adzuna.fetch_jobs(query=search_query, location=search_location)
+    logger.info(f"[ingest] fetched {len(jobs)} raw jobs from adzuna (query='{search_query}' location='{search_location}')")
+    return jobs
+
+
+def fetch_all_raw_jobs(search_query: str = "", search_location: str = "") -> list[dict]:
+    """Pulls from every configured source in one combined call: board
+    sources (not query-specific) plus Adzuna (which is). Used where a
+    single self-contained fetch is exactly what's wanted - the manual
+    /jobs/ingest trigger, /cron/ingest, and seed paths. The scheduler
+    itself calls fetch_board_jobs()/fetch_adzuna_jobs() separately
+    instead (see scheduler.py's scheduled_ingestion_job), specifically
+    to avoid the per-combo board refetch described above."""
+    all_jobs = fetch_board_jobs()
+    all_jobs.extend(fetch_adzuna_jobs(search_query, search_location))
     logger.info(f"[ingest] fetched {len(all_jobs)} raw jobs from all sources")
     return all_jobs
 
