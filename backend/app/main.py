@@ -105,8 +105,20 @@ async def add_security_headers(request: Request, call_next):
 @app.on_event("startup")
 def on_startup():
     init_db()
+    if os.getenv("DISABLE_SCHEDULER") == "1":
+        # Tests import this module via FastAPI's TestClient context manager,
+        # which fires this exact startup event - without this guard, every
+        # single test run would kick off the real scheduler (real network
+        # calls to Greenhouse/Lever/Ashby, real board-health checks) in a
+        # background thread that outlives the test and races against
+        # conftest.py's per-test Base.metadata.drop_all/create_all, which
+        # is what the "no such table" background errors during the test
+        # run were. Set by tests/conftest.py.
+        logger.info("App started, DB initialized, scheduler DISABLED (DISABLE_SCHEDULER=1).")
+        return
     interval = int(os.getenv("INGEST_INTERVAL_MINUTES", "60"))
-    start_scheduler(interval_minutes=interval)
+    board_health_interval = int(os.getenv("BOARD_HEALTH_INTERVAL_MINUTES", "360"))
+    start_scheduler(interval_minutes=interval, board_health_interval_minutes=board_health_interval)
     logger.info("App started, DB initialized, scheduler running.")
 
 
