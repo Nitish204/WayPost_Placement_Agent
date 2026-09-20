@@ -9,6 +9,7 @@ type ApplicationState = {
   id: number;
   status: string;
   filled_fields: { field: string; label: string }[];
+  submit_warning?: string | null;
   preview_screenshot_b64?: string;
   confirmation_screenshot_b64?: string;
   error_message?: string;
@@ -99,6 +100,11 @@ export function ApplyModal({ job, token, onClose }: { job: Job; token: string; o
                 This is the actual apply page for this job, filled in with your info. Nothing has been
                 submitted yet.
               </p>
+              {application.submit_warning && (
+                <p className="text-xs bg-yellow-100 border border-yellow-400 text-yellow-900 rounded-md px-3 py-2 mb-3">
+                  ⚠️ {application.submit_warning}
+                </p>
+              )}
               {application.filled_fields.length > 0 && (
                 <div className="mb-3 flex flex-wrap gap-1.5">
                   {application.filled_fields.map((f, i) => (
