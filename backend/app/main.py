@@ -487,6 +487,7 @@ def apply_prepare(
         phone=phone,
         cover_note=cover_note,
         filled_fields=json.dumps(result.get("filled_fields", [])),
+        submit_warning=result.get("submit_warning"),
         preview_screenshot_b64=result.get("screenshot_b64"),
         error_message=None if result["ok"] else result.get("reason"),
     )
@@ -593,6 +594,7 @@ def _serialize_application(a: Application, job: Job | None) -> dict:
             "location": job.location, "apply_url": job.apply_url,
         } if job else None,
         "filled_fields": json.loads(a.filled_fields or "[]"),
+        "submit_warning": a.submit_warning,
         "preview_screenshot_b64": a.preview_screenshot_b64,
         "confirmation_screenshot_b64": a.confirmation_screenshot_b64,
         "error_message": a.error_message,
