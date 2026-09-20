@@ -109,6 +109,7 @@ class Application(Base):
     phone = Column(String, nullable=True)              # captured at prepare time, reused verbatim at confirm time
     cover_note = Column(Text, nullable=True)            # so submit fills the exact form the human approved
     filled_fields = Column(Text, nullable=True)     # JSON string: [{"field": "email", "label": "..."}]
+    submit_warning = Column(Text, nullable=True)    # set at prepare time if the submit target was ambiguous - see apply_agent._locate_submit_button
     preview_screenshot_b64 = Column(Text, nullable=True)
     confirmation_screenshot_b64 = Column(Text, nullable=True)
     error_message = Column(Text, nullable=True)
