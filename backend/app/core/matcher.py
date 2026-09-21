@@ -12,8 +12,6 @@ vector DB (pgvector/Pinecone) later for better semantic matching.
 import json
 import difflib
 from pathlib import Path
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 FUZZY_MATCH_THRESHOLD = 0.82  # 0-1 similarity ratio; tuned to catch typos/near-misses without over-matching
@@ -103,9 +101,24 @@ def title_prefilter(job_title: str, wanted_titles: list[str]) -> bool:
 def rank_jobs(jobs: list[dict], profile_text: str, top_k: int = 30) -> list[dict]:
     """Ranks a pre-filtered job list by semantic similarity to the
     user's resume/profile text. Returns jobs with an added 'match_score'
-    field (0-100), sorted descending."""
+    field (0-100), sorted descending.
+
+    sklearn is imported here, not at module level, deliberately:
+    scikit-learn pulls in numpy + scipy, which measured at ~10s of
+    cumulative import time (see `python -X importtime -c "import
+    app.main"`) - over half of this app's total module-import cost.
+    Since app.main imports this module directly, that cost used to be
+    paid on EVERY cold start (Render free tier spins the instance down
+    after ~15min idle), before Uvicorn could even bind a port to answer
+    a health check - which is what was causing UptimeRobot to catch the
+    app mid-boot and report false 503s. Deferring the import to here
+    means it's only paid on the first actual job-search request, not
+    on every cold start, and /health responds immediately regardless."""
     if not jobs:
         return []
+
+    from sklearn.feature_extraction.text import TfidfVectorizer
+    from sklearn.metrics.pairwise import cosine_similarity
 
     corpus = [profile_text] + [j.get("description", "") or j.get("title", "") for j in jobs]
     vectorizer = TfidfVectorizer(stop_words="english", max_features=1000)
