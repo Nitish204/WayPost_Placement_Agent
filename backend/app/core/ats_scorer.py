@@ -10,8 +10,6 @@ framed to users as "an ATS-style estimate," not a guarantee.
 """
 import os
 import re
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
 
 from app.core.llm import simple_completion
 
@@ -19,7 +17,16 @@ from app.core.llm import simple_completion
 def keyword_overlap_score(resume_text: str, jd_text: str) -> dict:
     """TF-IDF cosine similarity between resume and job description, plus
     an explicit list of JD keywords missing from the resume. This is the
-    core signal most real ATS keyword-matchers use."""
+    core signal most real ATS keyword-matchers use.
+
+    sklearn imported here, not at module level - same reasoning as
+    matcher.py's rank_jobs(): it pulls in numpy+scipy, a large chunk of
+    this app's cold-start import cost, and main.py imports this module
+    directly, so that cost used to be paid on every Render free-tier
+    cold start before the server could even answer /health."""
+    from sklearn.feature_extraction.text import TfidfVectorizer
+    from sklearn.metrics.pairwise import cosine_similarity
+
     vectorizer = TfidfVectorizer(stop_words="english", max_features=500)
     tfidf = vectorizer.fit_transform([resume_text, jd_text])
     similarity = cosine_similarity(tfidf[0:1], tfidf[1:2])[0][0]
