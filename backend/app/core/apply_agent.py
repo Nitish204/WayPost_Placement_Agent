@@ -71,39 +71,76 @@ def _resolve_label(page, el) -> str:
     return name_attr or ""
 
 
-def _fill_form(page, candidate: dict) -> tuple[list[dict], list]:
-    """Returns (filled_field_descriptions, filled_element_handles) -
-    the handles are needed by _locate_submit_button to scope its search
-    to the actual form that got filled, not just any submit-looking
-    control on the page."""
+def _fill_form(page, candidate: dict):
+    """Fills recognized fields, searching the main document AND every
+    iframe on the page - returns (filled_field_descriptions,
+    filled_element_handles, frame).
+
+    Why iframes matter: page.locator() only sees the top-level
+    document. Many real ATS integrations render the actual application
+    form inside an <iframe> - a Greenhouse form embedded on a company's
+    own custom careers page is a common example, and Workday and
+    others do this too. Without searching frames, _fill_form would
+    silently find zero fields on any such page, and the agent would
+    then either report "no fields filled" or (worse, before the
+    disambiguation fix) grab an unrelated button elsewhere on the main
+    page. This was a likely cause of jobs failing outright with no
+    clear reason.
+
+    `frame` is whichever frame the fields were actually found in (the
+    main frame if nothing iframe-based matched), so
+    _locate_submit_button can search that SAME frame for the submit
+    control - a button in the main document is never the right target
+    for a form that lives inside an iframe, and vice versa; searching
+    across frame boundaries would reintroduce exactly the kind of
+    unrelated-button mismatch the disambiguation fix exists to prevent."""
     values = {
         "name": candidate.get("name", ""),
         "email": candidate.get("email", ""),
         "phone": candidate.get("phone", ""),
         "cover_letter": candidate.get("cover_note", ""),
     }
-    filled = []
-    filled_elements = []
-    inputs = page.locator(_TEXT_INPUT_SELECTOR)
-    count = inputs.count()
-    for i in range(count):
-        el = inputs.nth(i)
-        label = _resolve_label(page, el)
-        key = _match_field(label)
-        if not key or not values.get(key):
-            continue
+
+    for frame in page.frames:
+        filled = []
+        filled_elements = []
         try:
-            el.fill(values[key])
-            filled.append({"field": key, "label": label})
-            filled_elements.append(el)
+            inputs = frame.locator(_TEXT_INPUT_SELECTOR)
+            count = inputs.count()
         except Exception as e:
-            logger.info(f"[apply_agent] could not fill field '{label}': {e}")
-    return filled, filled_elements
+            logger.info(f"[apply_agent] could not inspect frame: {e}")
+            continue
+
+        for i in range(count):
+            el = inputs.nth(i)
+            label = _resolve_label(frame, el)
+            key = _match_field(label)
+            if not key or not values.get(key):
+                continue
+            try:
+                el.fill(values[key])
+                filled.append({"field": key, "label": label})
+                filled_elements.append(el)
+            except Exception as e:
+                logger.info(f"[apply_agent] could not fill field '{label}': {e}")
+
+        if filled:
+            return filled, filled_elements, frame
+
+    # Nothing matched in any frame - return the main frame so
+    # _locate_submit_button still has somewhere sensible to look.
+    return [], [], page.main_frame
 
 
-def _locate_submit_button(page, filled_elements: list):
+def _locate_submit_button(frame, filled_elements: list):
     """Picks the submit control to click - or refuses, rather than
     guessing, when it can't be confident.
+
+    `frame` is a Playwright Frame OR Page - both expose the same
+    .locator()/.frames-independent API this function needs, and
+    callers now pass whichever frame _fill_form actually filled fields
+    in (see that function's docstring for why cross-frame matching
+    would be wrong).
 
     Production incident that motivated this: on an Adzuna landing page,
     the naive `.first` match on all submit-like elements grabbed the
@@ -128,7 +165,7 @@ def _locate_submit_button(page, filled_elements: list):
 
     Returns (locator_or_None, reason_string_or_None).
     """
-    all_submits = page.locator(_SUBMIT_SELECTOR)
+    all_submits = frame.locator(_SUBMIT_SELECTOR)
     total = all_submits.count()
     visible_indices = [i for i in range(total) if all_submits.nth(i).is_visible()]
 
@@ -176,8 +213,8 @@ def prepare_application(apply_url: str, candidate: dict, timeout_ms: int = 20000
             page = browser.new_page()
             try:
                 page.goto(apply_url, wait_until="domcontentloaded", timeout=timeout_ms)
-                filled, filled_elements = _fill_form(page, candidate)
-                submit_btn, submit_warning = _locate_submit_button(page, filled_elements)
+                filled, filled_elements, target_frame = _fill_form(page, candidate)
+                submit_btn, submit_warning = _locate_submit_button(target_frame, filled_elements)
                 screenshot_bytes = page.screenshot(full_page=True)
             finally:
                 browser.close()
@@ -210,9 +247,9 @@ def confirm_submit(apply_url: str, candidate: dict, timeout_ms: int = 20000) -> 
             page = browser.new_page()
             try:
                 page.goto(apply_url, wait_until="domcontentloaded", timeout=timeout_ms)
-                _, filled_elements = _fill_form(page, candidate)
+                _, filled_elements, target_frame = _fill_form(page, candidate)
 
-                submit_btn, reason = _locate_submit_button(page, filled_elements)
+                submit_btn, reason = _locate_submit_button(target_frame, filled_elements)
                 if submit_btn is None:
                     return {"ok": False, "reason": reason}
 
