@@ -43,7 +43,11 @@ export default function Dashboard() {
     setBusy("search");
     const fd = new FormData(e.currentTarget);
     try {
-      const res = await api.searchJobs(String(fd.get("job_titles")), String(fd.get("locations")), token!);
+      const experienceLevel = String(fd.get("experience_level") || "");
+      const res = await api.searchJobs(
+        String(fd.get("job_titles")), String(fd.get("locations")), token!,
+        experienceLevel || undefined
+      );
       setJobs(res.jobs);
       setStatus(`${res.count} matches found.`);
     } catch (err: any) { setStatus(err.message); }
@@ -157,11 +161,25 @@ export default function Dashboard() {
             <>
               <Panel className="p-6">
                 <h2 className="font-bold text-xl mb-4">Search matches</h2>
-                <form onSubmit={search} className="grid sm:grid-cols-[1fr_1fr_auto] gap-3">
+                <form onSubmit={search} className="grid sm:grid-cols-2 lg:grid-cols-[1fr_1fr_auto_auto] gap-3">
                   <Input label="Roles" name="job_titles" defaultValue={user.job_titles} required />
                   <Input label="Locations" name="locations" defaultValue={user.locations} required />
+                  <label className="block">
+                    <span className="block text-sm font-medium mb-1.5">Experience</span>
+                    <select
+                      name="experience_level"
+                      defaultValue={user.experience_level || ""}
+                      className="w-full border-2 border-ink rounded-[10px] px-4 py-2.5 bg-cream focus:bg-white transition-colors outline-none font-display text-[15px]"
+                    >
+                      <option value="">Any</option>
+                      <option value="fresher">Fresher</option>
+                      <option value="0-2y">0-2 years</option>
+                      <option value="2-5y">2-5 years</option>
+                      <option value="5y+">5+ years</option>
+                    </select>
+                  </label>
                   <div className="flex items-end">
-                    <Button type="submit" disabled={busy === "search"} className="whitespace-nowrap">
+                    <Button type="submit" disabled={busy === "search"} className="whitespace-nowrap w-full sm:w-auto">
                       {busy === "search" ? "Searching…" : "Search"}
                     </Button>
                   </div>
