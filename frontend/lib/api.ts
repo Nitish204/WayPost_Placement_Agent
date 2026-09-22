@@ -54,8 +54,8 @@ export const api = {
   atsScore: (job_description: string, token: string, resume_text?: string) =>
     postForm("/resume/ats-score", { job_description, resume_text }, token),
 
-  searchJobs: (job_titles: string, locations: string, token: string, top_k = 20) =>
-    postForm("/jobs/search", { job_titles, locations, top_k }, token),
+  searchJobs: (job_titles: string, locations: string, token: string, experience_level?: string, top_k = 20) =>
+    postForm("/jobs/search", { job_titles, locations, experience_level, top_k }, token),
 
   seedSample: (token: string) => postForm("/jobs/seed-sample", {}, token),
 
