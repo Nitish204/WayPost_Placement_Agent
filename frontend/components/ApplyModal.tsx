@@ -118,11 +118,13 @@ export function ApplyModal({ job, token, onClose }: { job: Job; token: string; o
                 </div>
               )}
               {application.preview_screenshot_b64 && (
-                <img
-                  src={`data:image/png;base64,${application.preview_screenshot_b64}`}
-                  alt="Application preview"
-                  className="w-full border-2 border-ink rounded-[10px] mb-4"
-                />
+                <div className="border-2 border-ink rounded-[10px] mb-4 overflow-y-auto max-h-[45vh] bg-cream">
+                  <img
+                    src={`data:image/png;base64,${application.preview_screenshot_b64}`}
+                    alt="Application preview"
+                    className="w-full block"
+                  />
+                </div>
               )}
               <div className="flex gap-3">
                 <Button onClick={approve} className="flex-1">
@@ -143,11 +145,13 @@ export function ApplyModal({ job, token, onClose }: { job: Job; token: string; o
             <>
               <p className="text-sm font-bold mb-3">Submitted.</p>
               {application.confirmation_screenshot_b64 && (
-                <img
-                  src={`data:image/png;base64,${application.confirmation_screenshot_b64}`}
-                  alt="Submission confirmation"
-                  className="w-full border-2 border-ink rounded-[10px] mb-4"
-                />
+                <div className="border-2 border-ink rounded-[10px] mb-4 overflow-y-auto max-h-[45vh] bg-cream">
+                  <img
+                    src={`data:image/png;base64,${application.confirmation_screenshot_b64}`}
+                    alt="Submission confirmation"
+                    className="w-full block"
+                  />
+                </div>
               )}
               <Button onClick={onClose}>Done</Button>
             </>
