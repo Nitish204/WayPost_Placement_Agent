@@ -10,11 +10,26 @@ external embeddings API for the MVP - swap in real embeddings + a
 vector DB (pgvector/Pinecone) later for better semantic matching.
 """
 import json
+import re
 import difflib
 from pathlib import Path
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 FUZZY_MATCH_THRESHOLD = 0.82  # 0-1 similarity ratio; tuned to catch typos/near-misses without over-matching
+
+# Same canonical levels UserProfile.experience_level is stored as
+# (see app/main.py's /auth/register). Ordinal, low to high.
+_LEVEL_ORDER = {"fresher": 0, "0-2y": 1, "2-5y": 2, "5y+": 3}
+
+_SENIOR_PATTERNS = [
+    r"\bsenior\b", r"\bsr\.?\b", r"\bstaff\b", r"\bprincipal\b", r"\blead\b",
+    r"\bmanager\b", r"\bhead of\b", r"\bdirector\b",
+]
+_ENTRY_PATTERNS = [
+    r"\bentry.?level\b", r"\bjunior\b", r"\bjr\.?\b", r"\bnew grad(uate)?s?\b",
+    r"\bgraduate\b", r"\bfresher\b", r"\bintern(ship)?\b", r"\b0.?(-|to)?.?2\s*years?\b",
+]
+_YEARS_PATTERN = re.compile(r"(\d+)\+?\s*years?")
 
 
 def _load_city_aliases() -> dict:
@@ -98,6 +113,68 @@ def title_prefilter(job_title: str, wanted_titles: list[str]) -> bool:
     )
 
 
+def infer_job_experience_level(job_title: str, job_description: str) -> str:
+    """Heuristic classification from free text - Greenhouse/Lever/Adzuna
+    don't return structured experience-level metadata, only a title and
+    a description, so this is a keyword/pattern read of those, not a
+    guaranteed-accurate signal. Returns one of _LEVEL_ORDER's keys, or
+    'unknown' when the text gives no real signal either way.
+
+    Order of checks matters: senior-role keywords are checked first
+    since a posting can simultaneously mention a low year-count AND a
+    senior title (e.g. "Senior Engineer - own a team of 2+ years..."),
+    and title-level signals like 'Senior'/'Lead' are more reliable than
+    a stray number pulled from anywhere in the text."""
+    text = f"{job_title} {job_description}".lower()
+
+    if any(re.search(p, text) for p in _SENIOR_PATTERNS):
+        return "5y+"
+
+    years_mentioned = [int(n) for n in _YEARS_PATTERN.findall(text)]
+    if years_mentioned:
+        max_years = max(years_mentioned)
+        if max_years >= 5:
+            return "5y+"
+        if max_years >= 2:
+            return "2-5y"
+        return "0-2y"
+
+    if any(re.search(p, text) for p in _ENTRY_PATTERNS):
+        return "fresher"
+
+    return "unknown"
+
+
+def experience_matches(job_title: str, job_description: str, wanted_level: str | None) -> bool:
+    """True unless the job clearly requires meaningfully MORE
+    experience than wanted_level. Deliberately conservative in two
+    ways, matching this file's existing fallback philosophy (see
+    find_matches: filters that would wipe out the whole pool fall back
+    to no filtering rather than returning nothing):
+
+      - An 'unknown' classification never excludes a job. Most real
+        postings won't cleanly state a number, and treating ambiguous
+        text as disqualifying would hide plenty of genuinely-relevant
+        roles for the sake of a heuristic that was never going to be
+        perfect.
+      - One tier of slack is allowed either direction (wanted_rank + 1),
+        since level boundaries are fuzzy in practice - a 0-2y candidate
+        can reasonably apply to a posting that leans '2-5y', and rigid
+        exact-tier matching would be more restrictive than any real
+        recruiter's screening actually is.
+
+    No wanted_level (None/empty/not a known tier) means no preference
+    was set - don't filter at all."""
+    if not wanted_level or wanted_level not in _LEVEL_ORDER:
+        return True
+
+    inferred = infer_job_experience_level(job_title, job_description)
+    if inferred == "unknown":
+        return True
+
+    return _LEVEL_ORDER[inferred] <= _LEVEL_ORDER[wanted_level] + 1
+
+
 def rank_jobs(jobs: list[dict], profile_text: str, top_k: int = 30) -> list[dict]:
     """Ranks a pre-filtered job list by semantic similarity to the
     user's resume/profile text. Returns jobs with an added 'match_score'
@@ -141,12 +218,14 @@ def find_matches(
     locations: list[str],
     resume_text: str = "",
     top_k: int = 30,
+    experience_level: str | None = None,
 ) -> list[dict]:
     """Full pipeline: hard filters -> semantic ranking."""
     filtered = [
         j for j in jobs
         if title_prefilter(j.get("title", ""), job_titles)
         and location_matches(j.get("location", ""), locations)
+        and experience_matches(j.get("title", ""), j.get("description", ""), experience_level)
     ]
 
     # If filters wiped out everything (e.g. niche title), fall back to
