@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 def notify_new_matches_for_all_users(db: Session) -> dict:
     users = db.query(UserProfile).all()
-    active_jobs = db.query(Job).filter(Job.is_active == True).all()  # noqa: E712
+    active_jobs = db.query(Job).filter(Job.is_active == True).order_by(Job.fetched_at.desc()).all()  # noqa: E712
     job_by_id = {j.id: j for j in active_jobs}
 
     job_dicts = [
@@ -59,8 +59,21 @@ def notify_new_matches_for_all_users(db: Session) -> dict:
             existing = db.query(MatchResult).filter(
                 MatchResult.user_id == user.id, MatchResult.job_id == job_id
             ).first()
+
             if existing:
-                continue  # already scored/seen before, don't re-notify
+                if existing.notified:
+                    continue  # genuinely already sent - never resend
+                # Matched before but never successfully notified - most
+                # commonly because the user linked Telegram AFTER this
+                # match was first scored (the row was created with
+                # notified=False and nothing to send it to at the time).
+                # Retry it instead of treating "a MatchResult row
+                # exists" as equivalent to "already notified" - those
+                # are different things and conflating them was why a
+                # user linking Telegram after their first match cycle
+                # would never get notified for that match at all.
+                new_matches.append({**job, "score": existing.score})
+                continue
 
             mr = MatchResult(user_id=user.id, job_id=job_id, score=score, notified=False)
             db.add(mr)
