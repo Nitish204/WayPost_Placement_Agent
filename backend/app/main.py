@@ -343,6 +343,7 @@ async def ats_score(
 def search_jobs(
     job_titles: str = Form(..., description="Comma separated"),
     locations: str = Form(..., description="Comma separated"),
+    experience_level: str = Form(None, description="fresher/0-2y/2-5y/5y+ - defaults to the user's profile setting if not given"),
     top_k: int = Form(20),
     current_user: UserProfile = Depends(get_current_user),
     db: Session = Depends(get_session),
@@ -366,7 +367,15 @@ def search_jobs(
     titles_list = [t.strip() for t in job_titles.split(",")]
     locations_list = [l.strip() for l in locations.split(",")]
 
-    matches = find_matches(job_dicts, titles_list, locations_list, current_user.resume_text or "", top_k=top_k)
+    # Explicit param wins; otherwise fall back to whatever the user set
+    # on their profile at registration/update - this was previously
+    # collected and stored but never actually used to filter anything.
+    effective_experience = experience_level or current_user.experience_level
+
+    matches = find_matches(
+        job_dicts, titles_list, locations_list, current_user.resume_text or "",
+        top_k=top_k, experience_level=effective_experience,
+    )
     return {"count": len(matches), "jobs": matches}
 
 
