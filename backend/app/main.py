@@ -347,7 +347,13 @@ def search_jobs(
     current_user: UserProfile = Depends(get_current_user),
     db: Session = Depends(get_session),
 ):
-    all_jobs = db.query(Job).filter(Job.is_active == True).all()  # noqa: E712
+    # order_by is deliberate, not cosmetic: without it, SQL doesn't
+    # guarantee consistent row order between calls, which was showing
+    # up as "the same jobs, just shuffled/reversed" on repeated
+    # searches even when the underlying pool hadn't changed. Newest
+    # postings first is also just the more useful default ordering
+    # before ranking narrows/reorders by match_score below.
+    all_jobs = db.query(Job).filter(Job.is_active == True).order_by(Job.fetched_at.desc()).all()  # noqa: E712
     # `id` is included so the frontend can call /apply/prepare for a
     # specific result without a second lookup - it wasn't needed before
     # this endpoint's only consumer was "open apply_url in a new tab".
