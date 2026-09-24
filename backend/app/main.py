@@ -27,7 +27,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from dotenv import load_dotenv
 from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 
@@ -60,8 +59,28 @@ app = FastAPI(title="Placement Finder Agent", version="0.2.0")
 # - not blanket-applied to every endpoint, since job search/resume
 # upload etc. don't carry the same abuse risk and blanket limits just
 # degrade normal usage without adding real protection there.
+#
+# get_client_ip (not slowapi's default get_remote_address) is
+# deliberate: Render - like every PaaS - terminates the visitor's real
+# TCP connection at its own reverse proxy and forwards to this app over
+# an internal connection, so request.client.host is Render's internal
+# proxy address for EVERY request, not the actual visitor. slowapi's
+# default get_remote_address uses request.client.host directly, which
+# meant every login/register attempt across ALL users was sharing ONE
+# global rate-limit bucket - any burst of combined traffic (unrelated
+# individual users, or just repeated testing) could 429 everyone,
+# regardless of any single visitor's real request rate. X-Forwarded-For
+# is set correctly by Render (and virtually every reverse proxy); its
+# first entry is the original client IP.
 # ---------------------------------------------------------------------
-limiter = Limiter(key_func=get_remote_address)
+def get_client_ip(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+limiter = Limiter(key_func=get_client_ip)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
