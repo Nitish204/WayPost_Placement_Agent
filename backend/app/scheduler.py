@@ -14,7 +14,7 @@ import datetime as dt
 from apscheduler.schedulers.background import BackgroundScheduler
 
 from app.db import SessionLocal, UserProfile
-from app.core.ingest import fetch_board_jobs, fetch_adzuna_jobs, store_jobs
+from app.core.ingest import fetch_board_jobs, fetch_adzuna_jobs, store_jobs, deactivate_missing_board_jobs
 from app.core.matching_notify import notify_new_matches_for_all_users
 from app.core.board_validator import check_and_alert_boards
 
@@ -42,9 +42,11 @@ def scheduled_ingestion_job():
     """
     db = SessionLocal()
     try:
+        board_cutoff = dt.datetime.utcnow()
         board_jobs = fetch_board_jobs()
         board_result = store_jobs(db, board_jobs)
-        logger.info(f"[scheduler] board refresh (greenhouse/lever/ashby): {board_result}")
+        deactivated = deactivate_missing_board_jobs(db, board_cutoff)
+        logger.info(f"[scheduler] board refresh (greenhouse/lever/ashby): {board_result}, deactivated {deactivated} stale listings")
 
         profiles = db.query(UserProfile).all()
         seen_combos = set()
