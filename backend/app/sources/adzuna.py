@@ -72,5 +72,6 @@ def fetch_jobs(
                 "description": r.get("description", ""),
                 "apply_url": r.get("redirect_url", ""),
                 "source": "adzuna",
+                "external_id": str(r.get("id", "")) or None,  # Adzuna's own listing id - stable across reposts/edits
             })
     return all_jobs
