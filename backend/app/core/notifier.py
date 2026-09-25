@@ -53,3 +53,21 @@ def format_match_telegram(jobs: list[dict]) -> str:
             f"<a href=\"{j['apply_url']}\">Apply here</a>"
         )
     return "\n".join(lines)
+
+
+def format_apply_result_telegram(job: dict, ok: bool, reason: str | None = None) -> str:
+    """One message summarizing the outcome of a real submit attempt -
+    the confirm step of /apply/{id}/confirm. `job` needs title/company/
+    apply_url; `reason` is only used (and only shown) on failure."""
+    if ok:
+        return (
+            f"<b>✅ Application submitted</b>\n\n"
+            f"<b>{job['title']}</b> at {job['company']}\n"
+            f"<a href=\"{job['apply_url']}\">View posting</a>"
+        )
+    return (
+        f"<b>❌ Application failed to submit</b>\n\n"
+        f"<b>{job['title']}</b> at {job['company']}\n"
+        f"Reason: {reason or 'unknown error'}\n"
+        f"Nothing was submitted - you can retry from the app."
+    )
