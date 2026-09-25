@@ -33,6 +33,7 @@ def fetch_jobs(company_slug: str, timeout: int = 15) -> list[dict]:
             "description": p.get("descriptionPlain", p.get("description", "")),
             "apply_url": p.get("hostedUrl", p.get("applyUrl", "")),
             "source": "lever",
+            "external_id": p.get("id") or None,  # Lever's own posting id (a UUID) - stable across reposts/edits
         })
     return jobs
 
