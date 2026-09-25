@@ -39,6 +39,7 @@ from app.core.matcher import find_matches
 from app.core.ingest import run_ingestion_cycle, seed_sample_jobs, resolve_boards
 from app.core.board_validator import validate_boards
 from app.core.apply_agent import prepare_application, confirm_submit
+from app.core.notifier import send_telegram, format_apply_result_telegram
 from app.core.auth import (
     hash_password, verify_password, create_access_token, get_current_user,
     hash_security_answer, verify_security_answer,
@@ -573,6 +574,17 @@ def apply_confirm(
         application.error_message = result.get("reason")
     db.commit()
     db.refresh(application)
+
+    # Best-effort - a failed/unconfigured Telegram send should never
+    # fail the request itself, since the actual submit already
+    # happened (or didn't) and that outcome is committed above
+    # regardless of whether this notification goes out.
+    if current_user.notify_telegram and current_user.telegram_chat_id:
+        job_dict = {"title": job.title, "company": job.company, "apply_url": job.apply_url}
+        send_telegram(
+            current_user.telegram_chat_id,
+            format_apply_result_telegram(job_dict, result["ok"], result.get("reason")),
+        )
 
     return _serialize_application(application, job)
 
