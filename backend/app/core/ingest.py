@@ -126,6 +126,15 @@ def store_jobs(db: Session, raw_jobs: list[dict]) -> dict:
     """Inserts new jobs, skips duplicates (by hash), marks a fetch
     timestamp. Returns counts for observability/logging.
 
+    For a job that already exists, this now also "touches" it -
+    bumping fetched_at and flipping is_active back to True. That touch
+    is what deactivate_missing_board_jobs() below relies on to tell
+    "still posted, we saw it again this cycle" apart from "gone from
+    the board, nobody touched it this cycle" - without it, expiry has
+    no way to distinguish a job that's still open from one that's been
+    pulled, since both would otherwise just sit there with is_active=True
+    forever.
+
     Tracks `seen_hashes` for THIS batch, in addition to the DB-side
     exists check. That in-batch tracking is required, not optional:
     the session is configured with autoflush=False (see db.py), so a
@@ -152,25 +161,33 @@ def store_jobs(db: Session, raw_jobs: list[dict]) -> dict:
             skipped_count += 1
             continue
 
-        job_hash = make_job_hash(title, company, location)
+        source = j.get("source", "unknown")
+        external_id = j.get("external_id")
+        job_hash = make_job_hash(title, company, location, source=source, external_id=external_id)
         if job_hash in seen_hashes:
             skipped_count += 1
             continue
 
         exists = db.query(Job).filter(Job.job_hash == job_hash).first()
         if exists:
+            # Still posted as of this fetch - touch it so expiry (below)
+            # knows not to deactivate it, and revive it if it had
+            # previously been marked inactive and has now reappeared.
+            exists.fetched_at = dt.datetime.utcnow()
+            exists.is_active = True
             seen_hashes.add(job_hash)
             skipped_count += 1
             continue
 
         db_job = Job(
             job_hash=job_hash,
+            external_id=external_id,
             title=title,
             company=company,
             location=location or "Unspecified",
             description=j.get("description", ""),
             apply_url=j.get("apply_url", ""),
-            source=j.get("source", "unknown"),
+            source=source,
             posted_date=dt.datetime.utcnow(),
             fetched_at=dt.datetime.utcnow(),
             is_active=True,
@@ -184,11 +201,46 @@ def store_jobs(db: Session, raw_jobs: list[dict]) -> dict:
     return {"new": new_count, "skipped": skipped_count, "total_fetched": len(raw_jobs)}
 
 
+def deactivate_missing_board_jobs(db: Session, cutoff: dt.datetime) -> int:
+    """Marks a board-sourced job inactive once it stops showing up in
+    fetches. A Greenhouse/Lever/Ashby board token always returns that
+    company's ENTIRE current board (see fetch_board_jobs), so if an
+    active job from one of those sources has a fetched_at older than
+    `cutoff` - i.e. store_jobs() didn't touch it during this cycle - it
+    is no longer on the board and should stop being served.
+
+    Deliberately excludes 'adzuna': that source is fetched per
+    (query, location) combo rather than as one full snapshot, so
+    "wasn't in this particular fetch" doesn't mean "no longer posted" -
+    applying the same expiry there would incorrectly deactivate jobs
+    that just weren't matched by the current search terms.
+    """
+    updated = (
+        db.query(Job)
+        .filter(Job.source.in_(["greenhouse", "lever", "ashby"]))
+        .filter(Job.is_active == True)  # noqa: E712
+        .filter(Job.fetched_at < cutoff)
+        .update({"is_active": False}, synchronize_session=False)
+    )
+    db.commit()
+    if updated:
+        logger.info(f"[ingest] deactivated {updated} board jobs no longer present on their source board")
+    return updated
+
+
 def run_ingestion_cycle(db: Session, search_query: str = "", search_location: str = "") -> dict:
     """One full fetch-and-store cycle. This is what the scheduler calls
-    on a timer (see app/scheduler.py)."""
+    on a timer (see app/scheduler.py).
+
+    cutoff is captured BEFORE fetching, not after: store_jobs() bumps
+    fetched_at on every job still present, so any board job whose
+    fetched_at is still older than this pre-fetch cutoff once the cycle
+    finishes genuinely wasn't seen this time around."""
+    cutoff = dt.datetime.utcnow()
     raw_jobs = fetch_all_raw_jobs(search_query, search_location)
-    return store_jobs(db, raw_jobs)
+    result = store_jobs(db, raw_jobs)
+    result["deactivated"] = deactivate_missing_board_jobs(db, cutoff)
+    return result
 
 
 def seed_sample_jobs(db: Session) -> dict:
