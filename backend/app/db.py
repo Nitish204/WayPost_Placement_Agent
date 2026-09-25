@@ -40,6 +40,7 @@ class Job(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     job_hash = Column(String, unique=True, index=True)  # dedup key
+    external_id = Column(String, nullable=True, index=True)  # source's native job id, when the source provides one (see make_job_hash)
     title = Column(String, index=True)
     company = Column(String, index=True)
     location = Column(String, index=True)
@@ -152,11 +153,26 @@ class MatchResult(Base):
     notified = Column(Boolean, default=False)
 
 
-def make_job_hash(title: str, company: str, location: str) -> str:
-    """Stable hash so the same job from the same company/location isn't
-    stored twice even if the scraper runs repeatedly or job appears on
-    multiple boards with slightly different descriptions."""
-    key = f"{title.strip().lower()}|{company.strip().lower()}|{location.strip().lower()}"
+def make_job_hash(title: str, company: str, location: str, source: str = "", external_id: str | None = None) -> str:
+    """Stable dedup key for a posting.
+
+    Prefers (source, external_id) when the source gave us its own native
+    job id - that's a real, source-issued identity, so a *new* posting
+    with a new id always gets a new hash even if it has the exact same
+    title/company/location as something we saw before (e.g. a role
+    reopening, or two near-identical reqs at the same company).
+
+    Falls back to the old content-based hash (title|company|location)
+    only when no external_id is available (manual/seed data, or a
+    source we haven't wired an id through for). That fallback is what
+    originally caused reposts to be silently treated as duplicates
+    forever - keep wiring external_id through any new source instead of
+    relying on this path.
+    """
+    if external_id:
+        key = f"{source.strip().lower()}|{str(external_id).strip()}"
+    else:
+        key = f"{title.strip().lower()}|{company.strip().lower()}|{location.strip().lower()}"
     return hashlib.sha256(key.encode()).hexdigest()
 
 
