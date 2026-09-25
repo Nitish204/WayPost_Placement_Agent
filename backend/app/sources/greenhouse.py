@@ -40,6 +40,7 @@ def fetch_jobs(board_token: str, timeout: int = 15) -> list[dict]:
             "description": j.get("content", ""),  # HTML content
             "apply_url": j.get("absolute_url", ""),
             "source": "greenhouse",
+            "external_id": str(j.get("id", "")) or None,  # Greenhouse's own numeric job id - stable across reposts/edits
         })
     return jobs
 
