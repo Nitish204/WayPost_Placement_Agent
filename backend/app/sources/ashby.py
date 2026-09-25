@@ -40,6 +40,7 @@ def fetch_jobs(board_token: str, timeout: int = 15) -> list[dict]:
             "description": j.get("descriptionPlain", j.get("description", "")),
             "apply_url": j.get("applyUrl", j.get("jobUrl", "")),
             "source": "ashby",
+            "external_id": j.get("id") or None,  # Ashby's own posting id (a UUID) - stable across reposts/edits
         })
     return jobs
 
