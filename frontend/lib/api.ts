@@ -47,7 +47,7 @@ export const api = {
     const fd = new FormData();
     fd.append("file", file);
     const res = await fetch(BASE + "/resume/upload", { method: "POST", headers: authHeaders(token), body: fd });
-    if (!res.ok) throw new Error("Upload failed");
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || "Upload failed");
     return res.json();
   },
 
