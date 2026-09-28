@@ -84,4 +84,11 @@ export const api = {
     if (!res.ok) throw new Error("Could not check board health");
     return res.json();
   },
+
+  // No auth header - powers the public landing page's scan.log panel.
+  scanLog: async (): Promise<{ rows: { src: string; open: number }[] }> => {
+    const res = await fetch(BASE + "/public/scan-log");
+    if (!res.ok) throw new Error("Could not load scan log");
+    return res.json();
+  },
 };
