@@ -24,6 +24,7 @@ import datetime as dt
 from fastapi import FastAPI, UploadFile, File, Form, Depends, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from dotenv import load_dotenv
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -659,6 +660,37 @@ def seed_sample(
     after setup, before configuring real GREENHOUSE_BOARDS/LEVER_BOARDS/
     ADZUNA keys - no external calls, no API keys required."""
     return seed_sample_jobs(db)
+
+
+@app.get("/public/scan-log")
+def public_scan_log(db: Session = Depends(get_session)):
+    """Unauthenticated - powers the 'scan.log' panel on the landing
+    page, so it shows real counts from what's actually in the DB right
+    now instead of the hardcoded placeholder rows that used to live in
+    the frontend (app/page.tsx had a fixed `scanLog` array that never
+    changed, regardless of what jobs were really ingested).
+
+    Grouped by (source, company) over active jobs, top 5 by open count.
+    Intentionally excludes source == 'sample_data' - the "Load sample
+    jobs" test data is fine to show once logged in, but showing
+    Sample Corp/Sample Analytics Co on the public landing page would
+    make the product look fake to a visitor who hasn't signed up yet.
+    """
+    rows = (
+        db.query(Job.source, Job.company, func.count(Job.id).label("open"))
+        .filter(Job.is_active == True)  # noqa: E712
+        .filter(Job.source != "sample_data")
+        .group_by(Job.source, Job.company)
+        .order_by(func.count(Job.id).desc())
+        .limit(5)
+        .all()
+    )
+    return {
+        "rows": [
+            {"src": f"{source} · {company.lower()}", "open": open_count}
+            for source, company, open_count in rows
+        ]
+    }
 
 
 @app.get("/health")
