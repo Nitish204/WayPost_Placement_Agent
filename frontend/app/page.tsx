@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/Badge";
@@ -9,12 +9,15 @@ import { LoadingIntro } from "@/components/LoadingIntro";
 import { LiveClock } from "@/components/LiveClock";
 import { api } from "@/lib/api";
 
-const scanLog = [
-  { src: "greenhouse · figma", open: 4 },
-  { src: "lever · razorpay", open: 7 },
-  { src: "ashby · linear", open: 2 },
-  { src: "adzuna · full-stack, IN", open: 31 },
-  { src: "greenhouse · stripe", open: 12 },
+// Fallback only - shown briefly while the real /public/scan-log fetch
+// is in flight, or if it fails (e.g. backend cold-starting on a free
+// tier). Once the fetch resolves, this is replaced with real rows
+// from the DB. It intentionally stays as inert placeholder rather
+// than pretending to be live if the request never succeeds.
+const scanLogFallback = [
+  { src: "greenhouse · —", open: 0 },
+  { src: "lever · —", open: 0 },
+  { src: "adzuna · —", open: 0 },
 ];
 
 // One orchestrated page-load sequence (staggered rise), not scattered
@@ -34,6 +37,13 @@ export default function LandingPage() {
   const [mode, setMode] = useState<Mode>("login");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [scanLog, setScanLog] = useState(scanLogFallback);
+
+  useEffect(() => {
+    api.scanLog()
+      .then((res) => { if (res.rows?.length) setScanLog(res.rows); })
+      .catch(() => { /* keep the fallback rows - see comment above */ });
+  }, []);
 
   async function handleLogin(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
