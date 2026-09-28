@@ -201,32 +201,47 @@ def store_jobs(db: Session, raw_jobs: list[dict]) -> dict:
     return {"new": new_count, "skipped": skipped_count, "total_fetched": len(raw_jobs)}
 
 
-def deactivate_missing_board_jobs(db: Session, cutoff: dt.datetime) -> int:
+def deactivate_missing_board_jobs(db: Session, cutoff: dt.datetime, fetched_jobs: list[dict]) -> int:
     """Marks a board-sourced job inactive once it stops showing up in
-    fetches. A Greenhouse/Lever/Ashby board token always returns that
-    company's ENTIRE current board (see fetch_board_jobs), so if an
-    active job from one of those sources has a fetched_at older than
-    `cutoff` - i.e. store_jobs() didn't touch it during this cycle - it
-    is no longer on the board and should stop being served.
+    fetches. A Greenhouse/Lever/Ashby board token returns that
+    company's ENTIRE current board, so if an active job from one of
+    those boards wasn't touched this cycle it is no longer posted.
 
-    Deliberately excludes 'adzuna': that source is fetched per
-    (query, location) combo rather than as one full snapshot, so
-    "wasn't in this particular fetch" doesn't mean "no longer posted" -
-    applying the same expiry there would incorrectly deactivate jobs
-    that just weren't matched by the current search terms.
+    Only boards that actually RETURNED jobs this cycle are eligible.
+    The source fetchers swallow request errors (timeout, rate limit,
+    cold-start network) and return [] - indistinguishable from "this
+    board really has zero openings". Expiring on that signal meant one
+    failed request deactivated every job from that company, and the
+    pool (and the landing page scan log) drained to zero. A board that
+    returned nothing is skipped: its jobs stay as they were until a
+    later cycle sees the board respond.
+
+    Deliberately excludes 'adzuna': it's fetched per (query, location)
+    combo, not as one full snapshot, so "not in this fetch" doesn't
+    mean "no longer posted".
     """
-    updated = (
-        db.query(Job)
-        .filter(Job.source.in_(["greenhouse", "lever", "ashby"]))
-        .filter(Job.is_active == True)  # noqa: E712
-        .filter(Job.fetched_at < cutoff)
-        .update({"is_active": False}, synchronize_session=False)
-    )
+    board_sources = {"greenhouse", "lever", "ashby"}
+    responded = {
+        (j.get("source"), (j.get("company") or "").strip())
+        for j in fetched_jobs
+        if j.get("source") in board_sources
+    }
+    if not responded:
+        return 0
+
+    updated = 0
+    for source, company in responded:
+        updated += (
+            db.query(Job)
+            .filter(Job.source == source, Job.company == company)
+            .filter(Job.is_active == True)  # noqa: E712
+            .filter(Job.fetched_at < cutoff)
+            .update({"is_active": False}, synchronize_session=False)
+        )
     db.commit()
     if updated:
-        logger.info(f"[ingest] deactivated {updated} board jobs no longer present on their source board")
+        logger.info(f"[ingest] deactivated {updated} board jobs no longer present on boards that responded")
     return updated
-
 
 def run_ingestion_cycle(db: Session, search_query: str = "", search_location: str = "") -> dict:
     """One full fetch-and-store cycle. This is what the scheduler calls
@@ -239,7 +254,7 @@ def run_ingestion_cycle(db: Session, search_query: str = "", search_location: st
     cutoff = dt.datetime.utcnow()
     raw_jobs = fetch_all_raw_jobs(search_query, search_location)
     result = store_jobs(db, raw_jobs)
-    result["deactivated"] = deactivate_missing_board_jobs(db, cutoff)
+    result["deactivated"] = deactivate_missing_board_jobs(db, cutoff, raw_jobs)
     return result
 
 
