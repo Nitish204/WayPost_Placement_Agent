@@ -45,7 +45,7 @@ def scheduled_ingestion_job():
         board_cutoff = dt.datetime.utcnow()
         board_jobs = fetch_board_jobs()
         board_result = store_jobs(db, board_jobs)
-        deactivated = deactivate_missing_board_jobs(db, board_cutoff)
+        deactivated = deactivate_missing_board_jobs(db, board_cutoff, board_jobs)
         logger.info(f"[scheduler] board refresh (greenhouse/lever/ashby): {board_result}, deactivated {deactivated} stale listings")
 
         profiles = db.query(UserProfile).all()
