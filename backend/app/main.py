@@ -334,6 +334,25 @@ async def upload_resume(
         # clean message the frontend could actually show the user.
         raise HTTPException(400, str(e))
 
+    # A PDF can open and "parse" successfully while yielding zero actual
+    # text - this happens for scanned/image-based PDFs (no embedded text
+    # layer, e.g. a photo or scanner export), which pdfplumber simply
+    # can't read without OCR. Previously this fell through silently: a
+    # 200 "Resume parsed and saved." response was returned with an empty
+    # resume_text saved to the DB, so has_resume (bool(resume_text))
+    # came back False on the very next /auth/me call - the upload
+    # *looked* successful but the dashboard immediately reverted to
+    # "No resume uploaded yet." with no indication of why. Fail loudly
+    # here instead, so the person gets an honest, actionable error
+    # instead of a silently-broken success.
+    if not parsed["raw_text"].strip():
+        raise HTTPException(
+            400,
+            "We couldn't read any text from this file - it looks like a scanned/image-based PDF rather than "
+            "one with selectable text. Please upload a resume exported directly from Word/Google Docs/LaTeX "
+            "(not a scan or photo), or save it as DOCX instead.",
+        )
+
     current_user.resume_text = parsed["raw_text"]
     current_user.resume_skills = ",".join(parsed["skills"])
     db.commit()
