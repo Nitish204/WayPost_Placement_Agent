@@ -122,7 +122,11 @@ export default function Dashboard() {
               )}
               <label className="mt-3 block">
                 <span className="text-xs font-bold underline cursor-pointer">
-                  {busy === "resume" ? "Uploading…" : "Upload resume (PDF/DOCX)"}
+                  {busy === "resume"
+                    ? "Uploading…"
+                    : user.has_resume
+                      ? "Replace resume (PDF/DOCX)"
+                      : "Upload resume (PDF/DOCX)"}
                 </span>
                 <input type="file" accept=".pdf,.docx" onChange={uploadResume} className="hidden" disabled={busy === "resume"} />
               </label>
