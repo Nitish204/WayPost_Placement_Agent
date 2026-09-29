@@ -245,6 +245,10 @@ animation:glowPulse 1.8s var(--ease) infinite}
 .job-card.hot:hover{box-shadow:6px 6px 0 var(--yellow),0 0 24px -6px rgba(244,224,77,.5)}
 
 .confetti-piece{position:fixed;top:-14px;width:9px;height:9px;pointer-events:none;z-index:200;border-radius:2px}
+
+.pw-wrap{position:relative}
+.pw-wrap input{padding-right:52px}
+.pw-toggle{position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;font-size:11.5px;font-weight:700;cursor:pointer;color:var(--muted)}
 </style>
 </head>
 <body>
@@ -301,7 +305,10 @@ animation:glowPulse 1.8s var(--ease) infinite}
      <label>Email</label>
      <input type="email" id="login-email" required placeholder="you@email.com" />
      <label>Password</label>
-     <input type="password" id="login-password" required placeholder="••••••••" />
+     <div class="pw-wrap">
+      <input type="password" id="login-password" required placeholder="••••••••" />
+      <button type="button" class="pw-toggle" onclick="togglePw('login-password', this)">Show</button>
+     </div>
      <button class="btn-primary" type="submit" id="login-btn">Log in</button>
      <div style="text-align:center;margin-top:15px"><a href="#" onclick="switchTab('forgot');return false;" style="font-size:11.5px;color:var(--muted)">Forgot password?</a></div>
     </form>
@@ -309,7 +316,11 @@ animation:glowPulse 1.8s var(--ease) infinite}
     <form id="register-form" onsubmit="return handleRegister(event)" style="display:none">
      <label>Full name</label><input type="text" id="reg-name" required placeholder="Your name" />
      <label>Email</label><input type="email" id="reg-email" required placeholder="you@email.com" />
-     <label>Password</label><input type="password" id="reg-password" required minlength="8" placeholder="At least 8 characters" />
+     <label>Password</label>
+     <div class="pw-wrap">
+      <input type="password" id="reg-password" required minlength="8" placeholder="At least 8 characters" />
+      <button type="button" class="pw-toggle" onclick="togglePw('reg-password', this)">Show</button>
+     </div>
      <label>Security question</label><input type="text" id="reg-security-question" required placeholder="Your recovery question" />
      <div class="hint">Used to recover your account if you forget your password — no email needed.</div>
      <label>Answer</label><input type="text" id="reg-security-answer" required minlength="2" placeholder="Your answer" />
@@ -329,7 +340,11 @@ animation:glowPulse 1.8s var(--ease) infinite}
     <form id="reset-form" onsubmit="return handleResetWithAnswer(event)" style="display:none">
      <p class="auth-sub" style="margin:0 0 5px" id="reset-question-display"></p>
      <label>Your answer</label><input type="text" id="reset-security-answer" required placeholder="Your answer" />
-     <label>New password</label><input type="password" id="reset-password" required minlength="8" placeholder="At least 8 characters" />
+     <label>New password</label>
+     <div class="pw-wrap">
+      <input type="password" id="reset-password" required minlength="8" placeholder="At least 8 characters" />
+      <button type="button" class="pw-toggle" onclick="togglePw('reset-password', this)">Show</button>
+     </div>
      <button class="btn-primary" type="submit" id="reset-btn">Update password</button>
     </form>
     <div id="auth-msg"></div>
@@ -368,6 +383,13 @@ animation:glowPulse 1.8s var(--ease) infinite}
 <script>
 const API = '';
 let token = localStorage.getItem('waypost_token') || null;
+
+function togglePw(id, btn){
+ const input = document.getElementById(id);
+ const show = input.type === 'password';
+ input.type = show ? 'text' : 'password';
+ btn.textContent = show ? 'Hide' : 'Show';
+}
 
 function switchTab(tab){
   document.getElementById('tab-login').classList.toggle('active', tab==='login');
