@@ -1,4 +1,4 @@
-import { ButtonHTMLAttributes, InputHTMLAttributes } from "react";
+import { ButtonHTMLAttributes, InputHTMLAttributes, useState } from "react";
 
 export function Panel({
   children,
@@ -39,14 +39,31 @@ export function Button({
   );
 }
 
-export function Input({ label, ...props }: InputHTMLAttributes<HTMLInputElement> & { label: string }) {
+export function Input({ label, type, ...props }: InputHTMLAttributes<HTMLInputElement> & { label: string }) {
+  const [revealed, setRevealed] = useState(false);
+  const isPassword = type === "password";
   return (
     <label className="block">
       <span className="block text-sm font-medium mb-1.5">{label}</span>
-      <input
-        className="w-full border-2 border-ink rounded-[10px] px-4 py-2.5 bg-cream focus:bg-white transition-colors outline-none font-display text-[15px]"
-        {...props}
-      />
+      <div className="relative">
+        <input
+          type={isPassword && revealed ? "text" : type}
+          className={`w-full border-2 border-ink rounded-[10px] px-4 py-2.5 ${isPassword ? "pr-14" : ""} bg-cream focus:bg-white transition-colors outline-none font-display text-[15px]`}
+          {...props}
+        />
+        {isPassword && (
+          <button
+            type="button"
+            tabIndex={-1}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => setRevealed((v) => !v)}
+            aria-label={revealed ? "Hide password" : "Show password"}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold"
+          >
+            {revealed ? "Hide" : "Show"}
+          </button>
+        )}
+      </div>
     </label>
   );
 }
