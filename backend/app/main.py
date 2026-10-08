@@ -712,7 +712,7 @@ def public_scan_log(db: Session = Depends(get_session)):
     }
 
 
-@app.get("/health")
+@app.api_route("/health", methods=["GET", "HEAD"])
 def health():
     return {"status": "ok"}
 
