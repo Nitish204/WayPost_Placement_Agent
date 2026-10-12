@@ -19,7 +19,6 @@ type Tab = "search" | "ats" | "agent";
 
 export default function Dashboard() {
   const router = useRouter();
-  const [token, setToken] = useState<string | null>(null);
   const [user, setUser] = useState<any>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [status, setStatus] = useState("");
@@ -28,13 +27,13 @@ export default function Dashboard() {
   const [applyingTo, setApplyingTo] = useState<Job | null>(null);
 
   useEffect(() => {
-    const t = localStorage.getItem("waypost_token");
-    if (!t) { router.push("/"); return; }
-    setToken(t);
-    api.me(t).then(setUser).catch(() => { localStorage.removeItem("waypost_token"); router.push("/"); });
+    // Older versions kept the login token in localStorage; remove it. The
+    // session now lives in an httpOnly cookie that JavaScript cannot read.
+    try { localStorage.removeItem("waypost_token"); } catch {}
+    api.me().then(setUser).catch(() => router.push("/"));
   }, [router]);
 
-  if (!user || !token) {
+  if (!user) {
     return <div className="min-h-screen flex items-center justify-center font-mono text-sm text-muted">loading…</div>;
   }
 
@@ -45,7 +44,7 @@ export default function Dashboard() {
     try {
       const experienceLevel = String(fd.get("experience_level") || "");
       const res = await api.searchJobs(
-        String(fd.get("job_titles")), String(fd.get("locations")), token!,
+        String(fd.get("job_titles")), String(fd.get("locations")),
         experienceLevel || undefined
       );
       setJobs(res.jobs);
@@ -57,7 +56,7 @@ export default function Dashboard() {
   async function seedSample() {
     setBusy("seed");
     try {
-      await api.seedSample(token!);
+      await api.seedSample();
       setStatus("Sample jobs loaded. Search above to see them.");
     } catch (err: any) { setStatus(err.message); }
     setBusy(null);
@@ -68,17 +67,16 @@ export default function Dashboard() {
     if (!file) return;
     setBusy("resume");
     try {
-      const res = await api.uploadResume(file, token!);
+      const res = await api.uploadResume(file);
       setStatus(`Resume parsed. Skills found: ${res.skills_found.join(", ") || "none detected"}.`);
-      const fresh = await api.me(token!);
+      const fresh = await api.me();
       setUser(fresh);
     } catch (err: any) { setStatus(err.message); }
     setBusy(null);
   }
 
   function logout() {
-    localStorage.removeItem("waypost_token");
-    router.push("/");
+    api.logout().catch(() => {}).finally(() => router.push("/"));
   }
 
   const tabs: { id: Tab; label: string }[] = [
@@ -133,7 +131,7 @@ export default function Dashboard() {
             </div>
           </Panel>
 
-          <TelegramLink token={token} linked={user.telegram_linked} />
+          <TelegramLink linked={user.telegram_linked} />
 
           <Panel className="p-5">
             <p className="text-sm font-medium mb-3">No jobs yet?</p>
@@ -229,16 +227,15 @@ export default function Dashboard() {
             </>
           )}
 
-          {tab === "ats" && <AtsScorePanel token={token} hasResume={user.has_resume} />}
+          {tab === "ats" && <AtsScorePanel hasResume={user.has_resume} />}
 
-          {tab === "agent" && <AgentChat token={token} />}
+          {tab === "agent" && <AgentChat />}
         </div>
       </div>
 
       {applyingTo && applyingTo.id !== undefined && (
         <ApplyModal
           job={applyingTo as { id: number; title: string; company: string; location: string; apply_url: string }}
-          token={token}
           onClose={() => setApplyingTo(null)}
         />
       )}
