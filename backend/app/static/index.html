@@ -382,7 +382,10 @@ animation:glowPulse 1.8s var(--ease) infinite}
 
 <script>
 const API = '';
-let token = localStorage.getItem('waypost_token') || null;
+// The session lives in an httpOnly cookie set by the server, so this page
+// never sees or stores the token. Remove any token an older version of this
+// page left in localStorage.
+try{ localStorage.removeItem('waypost_token'); }catch(e){}
 
 function togglePw(id, btn){
  const input = document.getElementById(id);
@@ -403,7 +406,21 @@ function switchTab(tab){
   document.getElementById('auth-msg').innerHTML = '';
 }
 
-function showMsg(id, text, ok){ document.getElementById(id).innerHTML = `<div class="msg ${ok?'ok':'err'}">${text}</div>`; }
+// Escape any text that did not originate in this file before putting it in
+// innerHTML. Job data comes from third-party boards and resumes are
+// user-supplied, so none of it can be trusted as markup.
+function esc(v){
+  return String(v == null ? '' : v)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+// Only allow http(s) links; blocks javascript:, data:, etc.
+function safeUrl(u){
+  try{ const x = new URL(u, location.origin); return (x.protocol==='http:'||x.protocol==='https:') ? x.href : '#'; }
+  catch(e){ return '#'; }
+}
+
+function showMsg(id, text, ok){ document.getElementById(id).innerHTML = `<div class="msg ${ok?'ok':'err'}">${esc(text)}</div>`; }
 function setBtnLoading(id, loading, label){
   const btn = document.getElementById(id);
   btn.disabled = loading;
@@ -412,7 +429,7 @@ function setBtnLoading(id, loading, label){
 
 async function api(path, opts={}){
   opts.headers = opts.headers || {};
-  if(token) opts.headers['Authorization'] = 'Bearer ' + token;
+  opts.credentials = 'same-origin';
   const res = await fetch(API + path, opts);
   const data = await res.json().catch(()=>({}));
   if(!res.ok) throw new Error(data.detail || 'Something went wrong.');
@@ -485,8 +502,6 @@ async function handleResetWithAnswer(e){
   a saved token on page load - no shortcuts, no optimistic reveals.
 */
 async function onAuthed(data){
-  token = data.access_token;
-  localStorage.setItem('waypost_token', token);
   const authScreen = document.getElementById('auth-screen');
   authScreen.classList.add('leaving');
   try{
@@ -519,7 +534,7 @@ function revealDashboard(me){
 }
 
 function logout(){
-  token = null; localStorage.removeItem('waypost_token');
+  fetch(API + '/auth/logout', {method:'POST', credentials:'same-origin'}).catch(()=>{});
   document.body.classList.remove('authed');
   document.getElementById('userbar').style.display = 'none';
   document.getElementById('dashboard').classList.remove('ready');
@@ -527,7 +542,7 @@ function logout(){
 }
 
 function renderSkills(skills){
-  document.getElementById('resume-skills').innerHTML = skills.filter(Boolean).map((s,i) => `<span class="skill-pill" style="animation-delay:${i*0.05}s">${s}</span>`).join('');
+  document.getElementById('resume-skills').innerHTML = skills.filter(Boolean).map((s,i) => `<span class="skill-pill" style="animation-delay:${i*0.05}s">${esc(s)}</span>`).join('');
 }
 
 async function handleResumeUpload(e){
@@ -569,15 +584,15 @@ async function searchJobs(){
       return `
       <div class="job-card${hot?' hot':''}" style="animation-delay:${i*0.07}s">
         <div class="row">
-          <div><h3>${j.title}</h3><p class="meta">${j.company} · ${j.location}</p></div>
-          <span class="score-badge${hot?' hot':''}">${j.match_score}%</span>
+          <div><h3>${esc(j.title)}</h3><p class="meta">${esc(j.company)} · ${esc(j.location)}</p></div>
+          <span class="score-badge${hot?' hot':''}">${Number(j.match_score)||0}%</span>
         </div>
-        <p class="desc">${(j.description||'').slice(0,160)}${(j.description||'').length>160?'…':''}</p>
-        <a href="${j.apply_url}" target="_blank" rel="noopener">View posting →</a>
+        <p class="desc">${esc((j.description||'').slice(0,160))}${(j.description||'').length>160?'…':''}</p>
+        <a href="${esc(safeUrl(j.apply_url))}" target="_blank" rel="noopener noreferrer">View posting →</a>
       </div>`;
     }).join('');
     if(data.jobs.some(j => j.match_score >= 90)) burstConfetti();
-  }catch(err){ box.innerHTML = `<div class="msg err">${err.message}</div>`; }
+  }catch(err){ box.innerHTML = `<div class="msg err">${esc(err.message)}</div>`; }
 }
 
 /* Small, on-brand delight moment - fires only when a genuinely strong
@@ -604,16 +619,12 @@ function burstConfetti(){
 }
 
 /*
-  Bootstrap: a token merely EXISTING in localStorage is never enough to
-  show the dashboard - it could be expired, revoked, or edited by hand
-  in devtools. We always re-verify with the server first via
-  onAuthed(), which itself calls /auth/me before revealing anything.
+  Bootstrap: nothing is shown until the server confirms the session
+  cookie via /auth/me; a logged-out visitor just stays on the auth screen.
   If verification fails, logout() runs and the user simply sees the
   (already-hidden-by-default) auth screen - no flash, no leak.
 */
-if(token){
-  onAuthed({access_token: token, user:{name:''}}).catch(()=>{});
-}
+api('/auth/me').then(() => onAuthed({})).catch(() => {});
 </script>
 
 <script>
