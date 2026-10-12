@@ -6,7 +6,7 @@ import { api } from "@/lib/api";
 
 type Message = { role: "user" | "agent"; text: string };
 
-export function AgentChat({ token }: { token: string }) {
+export function AgentChat() {
   const [messages, setMessages] = useState<Message[]>([
     { role: "agent", text: "Ask me things like \"find me remote data analyst roles in India\" and I'll search and rank them against your resume." },
   ]);
@@ -24,7 +24,7 @@ export function AgentChat({ token }: { token: string }) {
     setInput("");
     setLoading(true);
     try {
-      const res = await api.agentChat(text, token);
+      const res = await api.agentChat(text);
       setMessages((m) => [...m, { role: "agent", text: res.reply }]);
     } catch (err: any) {
       setMessages((m) => [...m, { role: "agent", text: `Something went wrong: ${err.message || "try again."}` }]);
