@@ -36,7 +36,8 @@ def test_board_health_requires_login(client):
     assert r.status_code == 401
 
 
-def test_board_health_returns_results_and_stale_shape(client):
+def test_board_health_returns_results_and_stale_shape(client, monkeypatch):
+    monkeypatch.setenv("ADMIN_EMAILS", "test@test.com")
     register(client)
     token = login(client, "test@test.com")
     r = client.get("/admin/board-health", headers=auth_headers(token))
@@ -44,6 +45,14 @@ def test_board_health_returns_results_and_stale_shape(client):
     data = r.json()
     assert "results" in data and "stale" in data
     assert isinstance(data["stale"], list)
+
+
+def test_board_health_and_ingest_forbidden_for_non_admin(client, monkeypatch):
+    monkeypatch.delenv("ADMIN_EMAILS", raising=False)
+    register(client)
+    token = login(client, "test@test.com")
+    assert client.get("/admin/board-health", headers=auth_headers(token)).status_code == 403
+    assert client.post("/jobs/ingest", data={}, headers=auth_headers(token)).status_code == 403
 
 
 # ------------------------- /apply/prepare -------------------------
