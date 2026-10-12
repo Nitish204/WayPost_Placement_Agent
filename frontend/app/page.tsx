@@ -52,7 +52,6 @@ export default function LandingPage() {
     const fd = new FormData(e.currentTarget);
     try {
       const res = await api.login(String(fd.get("email")), String(fd.get("password")));
-      localStorage.setItem("waypost_token", res.access_token);
       router.push("/dashboard");
     } catch (err: any) {
       setError(err.message || "Couldn't log in. Check your details and try again.");
@@ -76,7 +75,6 @@ export default function LandingPage() {
         job_titles: String(fd.get("job_titles")),
         locations: String(fd.get("locations")),
       });
-      localStorage.setItem("waypost_token", res.access_token);
       router.push("/dashboard");
     } catch (err: any) {
       setError(err.message || "That didn't work. Check your details and try again.");
