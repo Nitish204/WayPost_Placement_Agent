@@ -1,4 +1,3 @@
-// File location: frontend/next.config.js
 /** @type {import('next').NextConfig} */
 
 // Everything the app loads comes from its own origin (fonts are bundled by
