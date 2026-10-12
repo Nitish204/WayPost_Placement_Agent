@@ -23,7 +23,7 @@ type ApplicationState = {
  * click submit on the real page - or Reject, which never touches the
  * submission path at all.
  */
-export function ApplyModal({ job, token, onClose }: { job: Job; token: string; onClose: () => void }) {
+export function ApplyModal({ job, onClose }: { job: Job; onClose: () => void }) {
   const [application, setApplication] = useState<ApplicationState | null>(null);
   const [phase, setPhase] = useState<"preparing" | "reviewing" | "submitting" | "done">("preparing");
   const [error, setError] = useState("");
@@ -32,7 +32,7 @@ export function ApplyModal({ job, token, onClose }: { job: Job; token: string; o
     let cancelled = false;
     setPhase("preparing");
     api
-      .applyPrepare(job.id, token)
+      .applyPrepare(job.id)
       .then((res) => {
         if (cancelled) return;
         setApplication(res);
@@ -47,13 +47,13 @@ export function ApplyModal({ job, token, onClose }: { job: Job; token: string; o
     return () => {
       cancelled = true;
     };
-  }, [job.id, token]);
+  }, [job.id]);
 
   async function approve() {
     if (!application) return;
     setPhase("submitting");
     try {
-      const res = await api.applyConfirm(application.id, token);
+      const res = await api.applyConfirm(application.id);
       setApplication(res);
       setPhase("done");
       if (res.status !== "submitted") setError(res.error_message || "Submission failed.");
@@ -66,7 +66,7 @@ export function ApplyModal({ job, token, onClose }: { job: Job; token: string; o
   async function reject() {
     if (!application) return;
     try {
-      await api.applyReject(application.id, token);
+      await api.applyReject(application.id);
     } finally {
       onClose();
     }
