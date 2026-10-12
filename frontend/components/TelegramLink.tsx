@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Panel, Button, Input } from "@/components/ui";
 import { api } from "@/lib/api";
 
-export function TelegramLink({ token, linked }: { token: string; linked: boolean }) {
+export function TelegramLink({ linked }: { linked: boolean }) {
   const [isLinked, setIsLinked] = useState(linked);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
@@ -15,7 +15,7 @@ export function TelegramLink({ token, linked }: { token: string; linked: boolean
     setLoading(true);
     const fd = new FormData(e.currentTarget);
     try {
-      await api.linkTelegram(String(fd.get("telegram_chat_id")), token);
+      await api.linkTelegram(String(fd.get("telegram_chat_id")));
       setIsLinked(true);
       setStatus("Telegram linked. You'll get job alerts there too.");
     } catch (err: any) {
