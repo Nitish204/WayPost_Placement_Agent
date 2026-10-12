@@ -21,7 +21,7 @@ import hashlib
 import secrets
 import logging
 import datetime as dt
-from fastapi import FastAPI, UploadFile, File, Form, Depends, HTTPException, Request
+from fastapi import FastAPI, UploadFile, File, Form, Depends, HTTPException, Request, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func
@@ -44,6 +44,7 @@ from app.core.notifier import send_telegram, format_apply_result_telegram
 from app.core.auth import (
     hash_password, verify_password, create_access_token, get_current_user,
     hash_security_answer, verify_security_answer,
+    set_session_cookie, clear_session_cookie, require_admin,
 )
 from app.agent import run_agent
 from app.scheduler import start_scheduler, stop_scheduler
@@ -95,12 +96,14 @@ app.add_middleware(SlowAPIMiddleware)
 #   ALLOWED_ORIGINS=https://waypost-placement-agent.onrender.com
 # ---------------------------------------------------------------------
 _allowed_origins_env = os.getenv("ALLOWED_ORIGINS", "").strip()
-allowed_origins = [o.strip() for o in _allowed_origins_env.split(",") if o.strip()] or ["*"]
-if allowed_origins == ["*"]:
-    logger.warning(
-        "[security] ALLOWED_ORIGINS not set - CORS is wide open (allow_origins=['*']). "
-        "Set ALLOWED_ORIGINS to your real deployed URL before treating this as production."
-    )
+allowed_origins = [o.strip() for o in _allowed_origins_env.split(",") if o.strip()]
+if not allowed_origins:
+    # No wildcard. The Next.js app reaches this API through its own /api
+    # rewrite (same-origin from the browser's point of view) and the static
+    # page is served from this same origin, so neither needs CORS. Only
+    # local dev origins are allowed unless ALLOWED_ORIGINS says otherwise.
+    allowed_origins = ["http://localhost:3000", "http://127.0.0.1:3000"]
+    logger.info("[security] ALLOWED_ORIGINS not set - CORS limited to local dev origins.")
 
 app.add_middleware(
     CORSMiddleware,
@@ -120,6 +123,18 @@ async def add_security_headers(request: Request, call_next):
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    # The bundled static page uses inline scripts/styles and Google Fonts;
+    # everything else is locked to this origin. /docs pulls Swagger UI from
+    # a CDN, so it is left alone.
+    if not request.url.path.startswith(("/docs", "/redoc", "/openapi.json")):
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; script-src 'self' 'unsafe-inline'; "
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+            "font-src https://fonts.gstatic.com; img-src 'self' data:; "
+            "connect-src 'self'; object-src 'none'; base-uri 'self'; "
+            "form-action 'self'; frame-ancestors 'none'"
+        )
     return response
 
 
@@ -165,6 +180,7 @@ def register(
     locations: str = Form(..., description="Comma separated, e.g. 'Bangalore,Remote'"),
     experience_level: str = Form("fresher"),
     db: Session = Depends(get_session),
+    response: Response = None,
 ):
     existing = db.query(UserProfile).filter(UserProfile.email == email).first()
     if existing:
@@ -180,6 +196,7 @@ def register(
     db.refresh(profile)
 
     token = create_access_token(profile)
+    set_session_cookie(request, response, token)
     return {
         "access_token": token, "token_type": "bearer",
         "user": {"id": profile.id, "name": profile.name, "email": profile.email},
@@ -193,12 +210,14 @@ def login(
     email: str = Form(...),
     password: str = Form(...),
     db: Session = Depends(get_session),
+    response: Response = None,
 ):
     profile = db.query(UserProfile).filter(UserProfile.email == email).first()
     if not profile or not profile.hashed_password or not verify_password(password, profile.hashed_password):
         raise HTTPException(401, "Incorrect email or password.")
 
     token = create_access_token(profile)
+    set_session_cookie(request, response, token)
     return {
         "access_token": token, "token_type": "bearer",
         "user": {"id": profile.id, "name": profile.name, "email": profile.email},
@@ -220,8 +239,20 @@ def me(current_user: UserProfile = Depends(get_current_user)):
     }
 
 
+@app.post("/auth/logout")
+def logout(response: Response):
+    """Clears the session cookie on this browser. The token itself stays
+    valid until it expires; use /auth/logout_everywhere to revoke it."""
+    clear_session_cookie(response)
+    return {"message": "Logged out."}
+
+
 @app.post("/auth/logout_everywhere")
-def logout_everywhere(current_user: UserProfile = Depends(get_current_user), db: Session = Depends(get_session)):
+def logout_everywhere(
+    response: Response,
+    current_user: UserProfile = Depends(get_current_user),
+    db: Session = Depends(get_session),
+):
     """Invalidates every token issued for this account, including the
     one used to call this endpoint. Useful if you suspect a token
     leaked, or just want to force a clean re-login on every device.
@@ -232,6 +263,7 @@ def logout_everywhere(current_user: UserProfile = Depends(get_current_user), db:
     as NULL/None rather than 0 - `None + 1` would otherwise crash here."""
     current_user.token_version = (current_user.token_version or 0) + 1
     db.commit()
+    clear_session_cookie(response)
     return {"message": "Logged out on all devices. Please log in again."}
 
 
@@ -423,10 +455,10 @@ def search_jobs(
 def trigger_ingest(
     search_query: str = Form(""),
     search_location: str = Form(""),
-    current_user: UserProfile = Depends(get_current_user),
+    current_user: UserProfile = Depends(require_admin),
     db: Session = Depends(get_session),
 ):
-    """Manually triggers one fetch-and-store cycle immediately, instead
+    """Admin only (ADMIN_EMAILS). Manually triggers one fetch-and-store cycle immediately, instead
     of waiting for the next scheduled run. Requires login so this can't
     be spammed anonymously."""
     result = run_ingestion_cycle(db, search_query, search_location)
@@ -485,7 +517,7 @@ def agent_chat(
 
 
 @app.get("/admin/board-health")
-def board_health(current_user: UserProfile = Depends(get_current_user)):
+def board_health(current_user: UserProfile = Depends(require_admin)):
     """Checks every currently-configured Greenhouse/Lever/Ashby board
     token against its real endpoint and reports which ones are dead.
 
