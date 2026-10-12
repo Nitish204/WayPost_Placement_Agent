@@ -11,18 +11,31 @@ Design:
   this replaces the old "trust whatever user_id you're given" pattern.
 """
 import os
+import logging
 import secrets
 import hashlib
 import datetime as dt
 from jose import jwt, JWTError
 from passlib.context import CryptContext
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
 from app.db import get_session, UserProfile
 
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "dev-only-insecure-secret-change-me")
+_INSECURE_DEFAULT = "dev-only-insecure-secret-change-me"
+SECRET_KEY = os.getenv("JWT_SECRET_KEY", "").strip()
+if not SECRET_KEY or SECRET_KEY == _INSECURE_DEFAULT:
+    # Never fall back to a publicly known value: anyone who has read the
+    # source could forge a valid login token with it. Use a random key
+    # for this process instead. The app still starts, but every user is
+    # signed out on each restart until JWT_SECRET_KEY is set properly.
+    SECRET_KEY = secrets.token_urlsafe(48)
+    logging.getLogger("waypost.auth").warning(
+        "[security] JWT_SECRET_KEY is not set (or is the old default). Using a "
+        "random per-process key; logins will not survive a restart. Set "
+        "JWT_SECRET_KEY to a long random value in your environment."
+    )
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "1440"))  # 24h default
 
@@ -55,13 +68,43 @@ def decode_access_token(token: str) -> dict:
         )
 
 
+# ---------------------------------------------------------------------
+# Session cookie
+# ---------------------------------------------------------------------
+# The login token is also delivered as an httpOnly cookie so browser
+# JavaScript (and therefore any XSS bug) can never read it. SameSite=Lax
+# stops other sites from making the browser send it on cross-site POSTs,
+# which is what protects the cookie from CSRF. A Bearer header is still
+# accepted so API clients and tests keep working unchanged.
+COOKIE_NAME = "waypost_session"
+
+
+def set_session_cookie(request: Request, response: Response, token: str) -> None:
+    host = request.url.hostname or ""
+    response.set_cookie(
+        COOKIE_NAME, token,
+        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        httponly=True,
+        secure=host not in ("localhost", "127.0.0.1"),  # plain http only for local dev
+        samesite="lax",
+        path="/",
+    )
+
+
+def clear_session_cookie(response: Response) -> None:
+    response.delete_cookie(COOKIE_NAME, path="/")
+
+
 def get_current_user(
+    request: Request,
     token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_session),
 ) -> UserProfile:
     """FastAPI dependency: resolves the authenticated user from the
-    Bearer token. Use this instead of trusting a raw `user_id` form
-    field - every protected endpoint should depend on this."""
+    Bearer token or, for the browser apps, the httpOnly session cookie.
+    Use this instead of trusting a raw `user_id` form field - every
+    protected endpoint should depend on this."""
+    token = token or request.cookies.get(COOKIE_NAME)
     if not token:
         raise HTTPException(status_code=401, detail="Not authenticated. Please log in.")
     payload = decode_access_token(token)
@@ -75,6 +118,16 @@ def get_current_user(
     if payload.get("tv") != (user.token_version or 0):
         raise HTTPException(status_code=401, detail="Session expired. Please log in again.")
     return user
+
+
+def require_admin(current_user: UserProfile = Depends(get_current_user)) -> UserProfile:
+    """Operator-only routes (manual ingestion, board diagnostics). There is
+    no admin role in the data model, so admins are listed by email in the
+    ADMIN_EMAILS env var (comma separated). Unset means nobody is admin."""
+    admins = {e.strip().lower() for e in os.getenv("ADMIN_EMAILS", "").split(",") if e.strip()}
+    if (current_user.email or "").lower() not in admins:
+        raise HTTPException(status_code=403, detail="Admin access required.")
+    return current_user
 
 
 # ---------------------------------------------------------------------
