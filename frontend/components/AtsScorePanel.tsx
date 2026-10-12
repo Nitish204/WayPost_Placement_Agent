@@ -17,7 +17,7 @@ type AtsResult = {
   qualitative_feedback?: string;
 };
 
-export function AtsScorePanel({ token, hasResume }: { token: string; hasResume: boolean }) {
+export function AtsScorePanel({ hasResume }: { hasResume: boolean }) {
   const [jd, setJd] = useState("");
   const [result, setResult] = useState<AtsResult | null>(null);
   const [error, setError] = useState("");
@@ -35,7 +35,7 @@ export function AtsScorePanel({ token, hasResume }: { token: string; hasResume: 
     }
     setLoading(true);
     try {
-      const res = await api.atsScore(jd, token);
+      const res = await api.atsScore(jd);
       setResult(res);
     } catch (err: any) {
       setError(err.message || "Couldn't score that. Try again.");
