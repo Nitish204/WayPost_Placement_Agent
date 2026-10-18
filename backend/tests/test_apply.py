@@ -20,10 +20,20 @@ from tests.test_main import register, login, auth_headers
 
 
 def _seed_and_get_job_id(client, headers):
-    client.post("/jobs/seed-sample", headers=headers)
-    from app.db import SessionLocal, Job
+    """Inserts one real-shaped job straight into the DB and returns its id.
+    (There is deliberately no public endpoint for creating test jobs.)"""
+    from app.db import SessionLocal, Job, make_job_hash
     db = SessionLocal()
-    job = db.query(Job).first()
+    job = Job(
+        job_hash=make_job_hash("Backend Engineer", "Acme", "Remote", "greenhouse", "t-1"),
+        external_id="t-1",
+        title="Backend Engineer", company="Acme", location="Remote",
+        description="Python, SQL, REST APIs.",
+        apply_url="https://boards.greenhouse.io/acme/jobs/1",
+        source="greenhouse", is_active=True,
+    )
+    db.add(job)
+    db.commit()
     job_id = job.id
     db.close()
     return job_id
