@@ -33,11 +33,11 @@ from slowapi.middleware import SlowAPIMiddleware
 
 load_dotenv()
 
-from app.db import init_db, get_session, Job, UserProfile, Application
+from app.db import init_db, get_session, SessionLocal, Job, UserProfile, Application
 from app.core.resume_parser import parse_resume
 from app.core.ats_scorer import compute_ats_score
 from app.core.matcher import find_matches
-from app.core.ingest import run_ingestion_cycle, seed_sample_jobs, resolve_boards
+from app.core.ingest import run_ingestion_cycle, purge_sample_jobs, resolve_boards
 from app.core.board_validator import validate_boards
 from app.core.apply_agent import prepare_application, confirm_submit
 from app.core.notifier import send_telegram, format_apply_result_telegram
@@ -138,9 +138,23 @@ async def add_security_headers(request: Request, call_next):
     return response
 
 
+def _purge_legacy_sample_jobs():
+    """Clears sample rows left behind by the removed "Load sample jobs"
+    button. Never allowed to block startup."""
+    db = SessionLocal()
+    try:
+        purge_sample_jobs(db)
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"Could not purge legacy sample jobs: {e}")
+        db.rollback()
+    finally:
+        db.close()
+
+
 @app.on_event("startup")
 def on_startup():
     init_db()
+    _purge_legacy_sample_jobs()
     if os.getenv("DISABLE_SCHEDULER") == "1":
         # Tests import this module via FastAPI's TestClient context manager,
         # which fires this exact startup event - without this guard, every
@@ -701,36 +715,16 @@ def _serialize_application(a: Application, job: Job | None) -> dict:
     }
 
 
-@app.post("/jobs/seed-sample")
-def seed_sample(
-    current_user: UserProfile = Depends(get_current_user),
-    db: Session = Depends(get_session),
-):
-    """Loads a small set of sample jobs from app/data/sample_jobs.json
-    into the pool. Use this to test search/matching/notifications right
-    after setup, before configuring real GREENHOUSE_BOARDS/LEVER_BOARDS/
-    ADZUNA keys - no external calls, no API keys required."""
-    return seed_sample_jobs(db)
-
-
 @app.get("/public/scan-log")
 def public_scan_log(db: Session = Depends(get_session)):
-    """Unauthenticated - powers the 'scan.log' panel on the landing
-    page, so it shows real counts from what's actually in the DB right
-    now instead of the hardcoded placeholder rows that used to live in
-    the frontend (app/page.tsx had a fixed `scanLog` array that never
-    changed, regardless of what jobs were really ingested).
+    """Unauthenticated - powers the open-roles sign on the landing page,
+    so it shows real counts from what's actually in the DB right now.
 
     Grouped by (source, company) over active jobs, top 5 by open count.
-    Intentionally excludes source == 'sample_data' - the "Load sample
-    jobs" test data is fine to show once logged in, but showing
-    Sample Corp/Sample Analytics Co on the public landing page would
-    make the product look fake to a visitor who hasn't signed up yet.
     """
     rows = (
         db.query(Job.source, Job.company, func.count(Job.id).label("open"))
         .filter(Job.is_active == True)  # noqa: E712
-        .filter(Job.source != "sample_data")
         .group_by(Job.source, Job.company)
         .order_by(func.count(Job.id).desc())
         .limit(5)
