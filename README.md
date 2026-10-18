@@ -59,7 +59,6 @@ that fits.
 | 📊 **ATS scoring** | Scores a resume against any job description the way an applicant-tracking system would, combining keyword/formatting checks with LLM-generated qualitative feedback |
 | 🔔 **Proactive alerts** | Push notifications — not pull — via email (Resend) and/or Telegram the moment a new posting clears the user's match threshold, with automatic de-duplication |
 | 🤖 **Conversational agent** | A natural-language endpoint lets users say things like *"find me remote data analyst roles in India"* and have the agent decide which tools to call |
-| 🧪 **Zero-key demo mode** | Seed realistic sample postings instantly to test the full search → match → notify pipeline before configuring any external API |
 
 ---
 
@@ -154,7 +153,6 @@ placement_agent/
 │   │
 │   ├── data/
 │   │   ├── companies.json           Fallback Greenhouse/Lever board list
-│   │   ├── sample_jobs.json          Demo postings for zero-key testing
 │   │   └── city_aliases.json          Location alias map for matching
 │   │
 │   └── static/
@@ -188,12 +186,10 @@ uvicorn app.main:app --reload --port 8000
 
 Open `http://localhost:8000` for the dashboard, or drive the API directly (see [API reference](#api-reference)).
 
-**No API keys yet?** Register an account, then call:
-```bash
-curl -X POST http://localhost:8000/jobs/seed-sample -H "Authorization: Bearer $TOKEN"
-```
-This loads five realistic sample postings with zero external calls, so you can exercise
-search, matching, and notifications immediately.
+**No API keys needed to see jobs.** On startup (and then every hour) the scanner pulls
+live postings from the public Greenhouse, Lever and Ashby board APIs, so the pool fills
+itself. Adzuna is optional and needs its own key. There is deliberately no "load sample
+data" button or endpoint.
 
 ### Deploying
 
@@ -318,9 +314,6 @@ curl -X POST /jobs/ingest -H "Authorization: Bearer $TOKEN" \
 # Link Telegram
 curl -X POST /notifications/telegram/link -H "Authorization: Bearer $TOKEN" \
   -F "telegram_chat_id=123456789"
-
-# Seed demo data (no API keys required)
-curl -X POST /jobs/seed-sample -H "Authorization: Bearer $TOKEN"
 ```
 
 </details>
