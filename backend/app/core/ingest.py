@@ -258,15 +258,25 @@ def run_ingestion_cycle(db: Session, search_query: str = "", search_location: st
     return result
 
 
-def seed_sample_jobs(db: Session) -> dict:
-    """Loads app/data/sample_jobs.json into the DB. Useful for a fresh
-    install/demo before any real API keys (Adzuna) or board lists are
-    configured - lets you test search/matching/notifications end to end
-    with realistic-looking data and zero external calls."""
-    try:
-        with open(DATA_DIR / "sample_jobs.json") as f:
-            sample_jobs = json.load(f)
-    except Exception as e:
-        logger.warning(f"[ingest] couldn't load sample_jobs.json: {e}")
-        return {"new": 0, "skipped": 0, "total_fetched": 0}
-    return store_jobs(db, sample_jobs)
+def purge_sample_jobs(db: Session) -> int:
+    """One-time cleanup for databases that were seeded back when the app
+    shipped a "Load sample jobs" button. That feature is gone for good,
+    but the rows it created ("Sample Corp", example.com apply links) would
+    otherwise sit in the pool forever and keep showing up in search.
+
+    Removes every job with source == 'sample_data' together with anything
+    that points at it (cached matches, auto-apply attempts). Safe to run on
+    every startup: once the rows are gone it's a single cheap SELECT.
+    Returns how many jobs were removed.
+    """
+    from app.db import MatchResult, Application
+
+    ids = [row[0] for row in db.query(Job.id).filter(Job.source == "sample_data").all()]
+    if not ids:
+        return 0
+    db.query(MatchResult).filter(MatchResult.job_id.in_(ids)).delete(synchronize_session=False)
+    db.query(Application).filter(Application.job_id.in_(ids)).delete(synchronize_session=False)
+    db.query(Job).filter(Job.id.in_(ids)).delete(synchronize_session=False)
+    db.commit()
+    logger.info(f"[ingest] purged {len(ids)} leftover sample jobs")
+    return len(ids)
