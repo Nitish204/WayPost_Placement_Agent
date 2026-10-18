@@ -98,9 +98,8 @@ def start_scheduler(interval_minutes: int = 60, board_health_interval_minutes: i
 
     Both get next_run_time=now so they fire immediately in the
     background at startup rather than waiting a full interval before
-    doing anything - this was the direct cause of a fresh install/deploy
-    showing an empty pool for up to an hour, which is exactly the gap
-    the "Load sample jobs" button was being used to paper over.
+    doing anything - otherwise a fresh install/deploy would show an empty
+    pool for up to an hour.
 
     Both run in APScheduler's own background thread, so neither blocks
     app startup or the first incoming request.
